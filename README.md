@@ -94,6 +94,7 @@ Most small businesses need 80% of enterprise features at 10% of the cost. **Clov
 - Immutable audit logs
 - Real-time security alerts
 - Session management
+- ClamAV virus scanning
 
 </td>
 <td width="33%" valign="top">
@@ -162,6 +163,7 @@ Real-time monitoring for unusual activity patterns:
 | Bulk Download | 20+ files in 10 min | High |
 | Blocked Extension | Prohibited file upload | Low |
 | Account Lockout | Too many failed attempts | Critical |
+| Malware Detected | Virus found in upload | Critical |
 
 **Email notifications** automatically sent for Critical and High severity alerts.
 
@@ -368,6 +370,23 @@ REPLICATION_WORKERS=4
 
 Replication is fully async and non-blocking — uploads complete immediately while replication jobs are queued in the background with automatic retries.
 
+### Virus Scanning (Optional)
+
+ClamAV integration scans all uploads for malware:
+
+<details>
+<summary><b>ClamAV Configuration</b></summary>
+
+```env
+CLAMAV_ENABLED=true
+CLAMAV_HOST=clamav
+CLAMAV_PORT=3310
+```
+
+</details>
+
+> See [Virus Scanning Documentation](docs/wiki/Virus-Scanning.md) for quarantine, auto-suspend, and monitoring details.
+
 > See [Deployment Guide](docs/wiki/Deployment-Guide.md) for detailed setup instructions.
 
 ---
@@ -476,7 +495,7 @@ Security is a core focus of ClovaLink. Key measures include:
 - **Zip Slip Prevention**: Path validation on archive extraction
 - **CORS Lockdown**: Explicit origin allowlisting in production
 
-> See [SECURITY.md](SECURITY.md) for complete security documentation and hardening guide.
+> See [Security Documentation](docs/wiki/Security.md) for complete security documentation and hardening guide.
 
 ---
 
