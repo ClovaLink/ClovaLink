@@ -23,6 +23,7 @@ ClovaLink provides secure file storage, sharing, and compliance features for org
 - **Storage Quotas** - Configurable limits per organization
 
 ### Security & Compliance
+- **Virus Scanning** - ClamAV integration scans all uploads for malware
 - **Password Policies** - Configurable per-tenant requirements
 - **IP Restrictions** - Allowlist/blocklist IP access controls
 - **Session Fingerprinting** - Detect and prevent token theft
@@ -96,6 +97,7 @@ Password: password123
 | [Extensions SDK](Extensions-SDK) | Build custom extensions |
 | [Admin Guide](Admin-Guide) | Tenant and user management |
 | [Security](Security) | Security features and configuration |
+| [Virus Scanning](Virus-Scanning) | ClamAV integration and malware protection |
 
 ## Tech Stack
 

@@ -194,6 +194,115 @@ If a user loses their 2FA device:
 
 ---
 
+## Role-Based Access Control
+
+### Standard Roles
+
+| Role | Description |
+|------|-------------|
+| **SuperAdmin** | Platform-wide access across all tenants |
+| **Admin** | Full access within their tenant |
+| **Manager** | Department oversight and file management |
+| **Employee** | Basic file access within their scope |
+
+### Permission Matrix - Page Access
+
+| Feature | SuperAdmin | Admin | Manager | Employee |
+|---------|:----------:|:-----:|:-------:|:--------:|
+| Dashboard | ✅ | ✅ | ❌ | ❌ |
+| Companies | ✅ | ❌ | ❌ | ❌ |
+| Users | ✅ | ✅ | ❌ | ❌ |
+| Files | ✅ | ✅ | ✅ | ✅ |
+| File Requests | ✅ | ✅ | ✅ | ✅ |
+| Settings | ✅ | ✅ | ❌ | ❌ |
+| Roles | ✅ | ✅ | ❌ | ❌ |
+| Audit Logs | ✅ | ✅ | ❌ | ❌ |
+| Security | ✅ | ✅ | ❌ | ❌ |
+
+### Permission Matrix - File Operations
+
+| Operation | SuperAdmin | Admin | Manager | Employee |
+|-----------|:----------:|:-----:|:-------:|:--------:|
+| View all files | ✅ | ✅ | Own dept | Own dept |
+| View private files | ✅ | ✅ | Own only | Own only |
+| View locked files | ✅ | ✅ | ✅ | Authorized only |
+| Upload files | ✅ | ✅ | ✅ | ✅ |
+| Download files | ✅ | ✅ | Accessible | Accessible |
+| Delete files | ✅ | ✅ | Own files | Own files |
+| Lock/Unlock files | ✅ | ✅ | ✅ | ❌ |
+| Share files | ✅ | ✅ | ✅ | Own files |
+| Create folders | ✅ | ✅ | ✅ | ✅ |
+
+### Permission Matrix - Search Results
+
+| Search Type | SuperAdmin | Admin | Manager | Employee |
+|-------------|:----------:|:-----:|:-------:|:--------:|
+| Companies | ✅ | ❌ | ❌ | ❌ |
+| Users | ✅ | ✅ | ❌ | ❌ |
+| Files | All | All tenant | Accessible | Accessible |
+
+### Custom Roles
+
+Custom roles inherit permissions from a **base role** (Manager, Employee) and can have additional permissions granted:
+
+```
+files.lock      - Can lock files
+files.unlock    - Can unlock files
+users.view      - Can view user list
+users.manage    - Can create/edit users
+audit.view      - Can view audit logs
+settings.view   - Can view settings
+```
+
+The system looks up a custom role's `base_role` to determine baseline permissions, then applies any additional granted permissions.
+
+---
+
+## File Access Control
+
+### Visibility Levels
+
+| Visibility | Who Can Access |
+|------------|----------------|
+| **department** | Users in the same department or with department in `allowed_department_ids` |
+| **private** | Only the file owner |
+
+### File Locking
+
+Locked files have restricted access. Only these users can access a locked file:
+
+1. **Locker**: User who locked the file
+2. **Owner**: File owner always has access
+3. **Role requirement**: Optional role restriction (e.g., "Manager" required)
+4. **Password protection**: Optional password for unlock
+
+Non-authorized users cannot:
+- Preview locked files
+- Download locked files
+- Share locked files
+- View locked files in search results
+
+### Department Access
+
+Files inherit department from their parent folder. Users can access files if:
+
+1. File has no department (root-level)
+2. File is in user's primary department
+3. File is in user's `allowed_department_ids`
+4. User owns the file
+
+### File Locking via UI
+
+1. Right-click file → **Lock**
+2. Optionally set:
+   - Password requirement
+   - Role requirement
+3. Click **Lock File**
+
+To unlock: Right-click → **Unlock** (requires authorization)
+
+---
+
 ## IP Restrictions
 
 ### Configuration
@@ -387,6 +496,49 @@ Files are deduplicated using Blake3 hashing:
 - Same file in different departments = separate storage
 - Maintains tenant/department isolation
 
+### Content-Addressed Storage
+
+Files are stored using Blake3 content hashes:
+
+```
+uploads/{tenant_id}/{department_id}/{content_hash}
+```
+
+Benefits:
+- **Deduplication**: Identical files stored once per department
+- **Integrity verification**: Hash mismatch indicates corruption
+- **Immutable references**: Renaming/moving files doesn't touch storage
+
+### Presigned URLs
+
+For S3-compatible storage, downloads can use presigned URLs:
+
+```bash
+USE_PRESIGNED_URLS=true
+PRESIGNED_URL_EXPIRY_SECS=3600  # 1 hour
+```
+
+Benefits:
+- Bypasses application server for large files
+- Reduces bandwidth costs
+- Maintains security via time-limited signed URLs
+
+### Streaming Downloads (Zero-Copy)
+
+When presigned URLs are unavailable (local storage or fallback), downloads use zero-copy streaming:
+
+| File Size | Memory Usage |
+|-----------|--------------|
+| 10 MB | ~64 KB buffer |
+| 100 MB | ~64 KB buffer |
+| 1 GB | ~64 KB buffer |
+
+Benefits:
+- Constant memory usage regardless of file size
+- No OOM risk from large file downloads
+- Multiple concurrent downloads without memory pressure
+- Files are never fully loaded into RAM
+
 ---
 
 ## Rate Limiting
@@ -421,6 +573,54 @@ The client should:
 
 ---
 
+## API Security
+
+### CORS Configuration
+
+Configure allowed origins for cross-origin requests:
+
+```bash
+# Production: Explicit allowed origins
+CORS_ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+
+# Development: Enable localhost origins
+CORS_DEV_MODE=true
+```
+
+Security measures:
+- **Strict origin validation**: Only configured origins allowed
+- **Credentials support**: Cookies and auth headers permitted from allowed origins
+- **Limited methods**: Only GET, POST, PUT, DELETE, PATCH, OPTIONS
+- **Limited headers**: Only Content-Type, Authorization, X-Requested-With
+
+### Redis Rate Limiting
+
+Atomic Redis-based rate limiting prevents abuse:
+
+```bash
+# Configuration
+PER_IP_REQUESTS_PER_SEC=100    # Max requests per second
+PER_IP_BURST_SIZE=200          # Burst allowance
+```
+
+- **Atomic operations**: Uses Redis INCR + EXPIRE to prevent race conditions
+- **Per-IP tracking**: Limits applied per client IP
+- **Trusted proxy support**: Configure `TRUSTED_PROXY_IPS` for load balancer scenarios
+
+### Request Security
+
+Built-in protections against common attacks:
+
+| Attack | Protection |
+|--------|------------|
+| **Header injection** | Content-Disposition sanitization |
+| **Path traversal** | Input validation on file paths |
+| **Zip-slip** | Zip downloads sanitize paths |
+| **DoS via large files** | Configurable max upload size |
+| **Memory exhaustion** | Streaming downloads (constant memory) |
+
+---
+
 ## Blocked File Extensions
 
 ### Default Blocked Types
@@ -448,6 +648,71 @@ PUT /api/settings/blocked-extensions
 ### Bypass for Admins
 
 Admins cannot bypass blocked extensions. The blocks apply universally to prevent accidental policy violations.
+
+---
+
+## Virus Scanning
+
+ClovaLink integrates with **ClamAV** to automatically scan all uploaded files for viruses, malware, trojans, and other threats.
+
+### How It Works
+
+1. User uploads a file
+2. File is stored with `scan_status: pending`
+3. Background worker sends file to ClamAV daemon
+4. Based on result:
+   - **Clean**: File is available for download
+   - **Infected**: File is quarantined, deleted, or flagged
+
+### Actions on Detection
+
+| Action | Behavior |
+|--------|----------|
+| `quarantine` | Move to quarantine, admin can restore (default) |
+| `delete` | Permanently delete the file |
+| `flag` | Mark as infected but keep accessible |
+
+### Configuration
+
+Enable/disable and configure per-tenant:
+
+```bash
+PUT /api/settings/virus-scan
+{
+  "enabled": true,
+  "action_on_detect": "quarantine",
+  "notify_admin": true,
+  "notify_uploader": true,
+  "auto_suspend_uploader": true,
+  "suspend_threshold": 3
+}
+```
+
+### Security Alerts
+
+Malware detection triggers alerts:
+
+| Type | Severity | Trigger |
+|------|----------|---------|
+| `malware_detected` | High | File contains malware |
+| `user_auto_suspended` | High | User suspended for repeat offenses |
+
+### Auto-Suspend
+
+Automatically suspend users who repeatedly upload malware:
+- Enable `auto_suspend_uploader`
+- Set `suspend_threshold` (default: 1)
+- User is suspended after reaching threshold
+- Admin notified and must manually unsuspend
+
+### Quarantine Management
+
+Admins can manage quarantined files:
+1. Go to **Security** → **Quarantine**
+2. Review flagged files
+3. **Release** if false positive, or **Delete Permanently**
+
+> **📖 Full Documentation**: See [Virus-Scanning](Virus-Scanning.md) for complete configuration, troubleshooting, and API reference.
 
 ---
 
@@ -488,6 +753,61 @@ European data protection:
 - ✅ Deletion request workflow
 - ✅ Data portability
 - ✅ Privacy-first defaults
+
+---
+
+## Production Security Checklist
+
+Before deploying to production, ensure:
+
+### Required Configuration
+
+```bash
+# Strong JWT secret (64+ random characters)
+JWT_SECRET=$(openssl rand -base64 64)
+
+# Database with SSL
+DATABASE_URL=postgres://user:pass@host/db?sslmode=require
+
+# Redis with password
+REDIS_URL=redis://:password@host:6379
+
+# Explicit allowed origins (no wildcards)
+CORS_ALLOWED_ORIGINS=https://your-domain.com
+
+# Disable dev mode
+CORS_DEV_MODE=false
+ENVIRONMENT=production
+```
+
+### Deployment Checklist
+
+- [ ] Set strong `JWT_SECRET` (64+ random characters)
+- [ ] Configure explicit `CORS_ALLOWED_ORIGINS`
+- [ ] Enable TLS termination (Nginx/Caddy)
+- [ ] Use managed PostgreSQL with encryption
+- [ ] Enable S3 server-side encryption
+- [ ] Configure rate limiting
+- [ ] Set up log aggregation for audit logs
+- [ ] Regular security updates for containers
+- [ ] Configure backup schedule
+- [ ] Test disaster recovery procedure
+- [ ] Enable virus scanning (ClamAV)
+- [ ] Review and set compliance mode
+
+### Optional Security Enhancements
+
+```bash
+# Trusted proxy for load balancer
+TRUSTED_PROXY_IPS=10.0.0.0/8
+
+# Rate limiting
+PER_IP_REQUESTS_PER_SEC=100
+PER_IP_BURST_SIZE=200
+
+# Key rotation (zero-downtime)
+JWT_SECRET_SECONDARY=<old-secret-during-rotation>
+```
 
 ---
 
