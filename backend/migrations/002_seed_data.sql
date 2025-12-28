@@ -27,67 +27,67 @@ ON CONFLICT (key) DO NOTHING;
 -- ============================================================================
 
 INSERT INTO roles (id, tenant_id, name, description, base_role, is_system) VALUES
-    ('10000000-0000-0000-0000-000000000001', NULL, 'SuperAdmin', 'Full administrative control over all companies and settings', 'SuperAdmin', true),
-    ('10000000-0000-0000-0000-000000000002', NULL, 'Admin', 'Company administrator with user and settings management', 'Admin', true),
-    ('10000000-0000-0000-0000-000000000003', NULL, 'Manager', 'Team manager with file request and sharing capabilities', 'Manager', true),
-    ('10000000-0000-0000-0000-000000000004', NULL, 'Employee', 'Standard user with basic file access', 'Employee', true)
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', NULL, 'SuperAdmin', 'Full administrative control over all companies and settings', 'SuperAdmin', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'Admin', 'Company administrator with user and settings management', 'Admin', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', NULL, 'Manager', 'Team manager with file request and sharing capabilities', 'Manager', true),
+    ('04d5e6f7-a7b8-4c9d-0e1f-2a3b4c5d6e7f', NULL, 'Employee', 'Standard user with basic file access', 'Employee', true)
 ON CONFLICT DO NOTHING;
 
 -- Employee permissions
 INSERT INTO role_permissions (role_id, permission, granted) VALUES
-    ('10000000-0000-0000-0000-000000000004', 'files.view', true),
-    ('10000000-0000-0000-0000-000000000004', 'files.upload', true),
-    ('10000000-0000-0000-0000-000000000004', 'files.download', true)
+    ('04d5e6f7-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'files.view', true),
+    ('04d5e6f7-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'files.upload', true),
+    ('04d5e6f7-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'files.download', true)
 ON CONFLICT DO NOTHING;
 
 -- Manager permissions
 INSERT INTO role_permissions (role_id, permission, granted) VALUES
-    ('10000000-0000-0000-0000-000000000003', 'files.view', true),
-    ('10000000-0000-0000-0000-000000000003', 'files.upload', true),
-    ('10000000-0000-0000-0000-000000000003', 'files.download', true),
-    ('10000000-0000-0000-0000-000000000003', 'files.delete', true),
-    ('10000000-0000-0000-0000-000000000003', 'files.share', true),
-    ('10000000-0000-0000-0000-000000000003', 'requests.create', true),
-    ('10000000-0000-0000-0000-000000000003', 'requests.view', true)
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'files.view', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'files.upload', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'files.download', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'files.delete', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'files.share', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'requests.create', true),
+    ('03c4d5e6-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'requests.view', true)
 ON CONFLICT DO NOTHING;
 
 -- Admin permissions
 INSERT INTO role_permissions (role_id, permission, granted) VALUES
-    ('10000000-0000-0000-0000-000000000002', 'files.view', true),
-    ('10000000-0000-0000-0000-000000000002', 'files.upload', true),
-    ('10000000-0000-0000-0000-000000000002', 'files.download', true),
-    ('10000000-0000-0000-0000-000000000002', 'files.delete', true),
-    ('10000000-0000-0000-0000-000000000002', 'files.share', true),
-    ('10000000-0000-0000-0000-000000000002', 'requests.create', true),
-    ('10000000-0000-0000-0000-000000000002', 'requests.view', true),
-    ('10000000-0000-0000-0000-000000000002', 'users.view', true),
-    ('10000000-0000-0000-0000-000000000002', 'users.invite', true),
-    ('10000000-0000-0000-0000-000000000002', 'users.edit', true),
-    ('10000000-0000-0000-0000-000000000002', 'roles.view', true),
-    ('10000000-0000-0000-0000-000000000002', 'audit.view', true),
-    ('10000000-0000-0000-0000-000000000002', 'settings.view', true)
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'files.view', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'files.upload', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'files.download', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'files.delete', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'files.share', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'requests.create', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'requests.view', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'users.view', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'users.invite', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'users.edit', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'roles.view', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'audit.view', true),
+    ('02b3c4d5-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'settings.view', true)
 ON CONFLICT DO NOTHING;
 
 -- SuperAdmin permissions
 INSERT INTO role_permissions (role_id, permission, granted) VALUES
-    ('10000000-0000-0000-0000-000000000001', 'files.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'files.upload', true),
-    ('10000000-0000-0000-0000-000000000001', 'files.download', true),
-    ('10000000-0000-0000-0000-000000000001', 'files.delete', true),
-    ('10000000-0000-0000-0000-000000000001', 'files.share', true),
-    ('10000000-0000-0000-0000-000000000001', 'requests.create', true),
-    ('10000000-0000-0000-0000-000000000001', 'requests.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'users.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'users.invite', true),
-    ('10000000-0000-0000-0000-000000000001', 'users.edit', true),
-    ('10000000-0000-0000-0000-000000000001', 'users.delete', true),
-    ('10000000-0000-0000-0000-000000000001', 'roles.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'roles.manage', true),
-    ('10000000-0000-0000-0000-000000000001', 'audit.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'audit.export', true),
-    ('10000000-0000-0000-0000-000000000001', 'settings.view', true),
-    ('10000000-0000-0000-0000-000000000001', 'settings.edit', true),
-    ('10000000-0000-0000-0000-000000000001', 'tenants.manage', true)
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'files.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'files.upload', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'files.download', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'files.delete', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'files.share', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'requests.create', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'requests.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'users.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'users.invite', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'users.edit', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'users.delete', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'roles.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'roles.manage', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'audit.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'audit.export', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'settings.view', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'settings.edit', true),
+    ('01a2b3c4-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'tenants.manage', true)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -95,34 +95,34 @@ ON CONFLICT DO NOTHING;
 -- ============================================================================
 
 INSERT INTO tenants (id, name, domain, plan, status, compliance_mode) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'Acme Corp', 'acme.com', 'Enterprise', 'active', 'HIPAA'),
-    ('22222222-2222-2222-2222-222222222222', 'Globex Inc', 'globex.com', 'Business', 'active', 'SOX'),
-    ('33333333-3333-3333-3333-333333333333', 'Soylent Corp', 'soylent.com', 'Starter', 'suspended', 'Standard')
+    ('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'ClovaLink', 'clovalink.com', 'Enterprise', 'active', 'HIPAA'),
+    ('b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'Globex Inc', 'globex.com', 'Business', 'active', 'SOX'),
+    ('c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'Soylent Corp', 'soylent.com', 'Starter', 'suspended', 'Standard')
 ON CONFLICT DO NOTHING;
 
 -- Apply compliance defaults
 UPDATE tenants SET mfa_required = true, public_sharing_enabled = false, session_timeout_minutes = 15
-WHERE id = '11111111-1111-1111-1111-111111111111';
+WHERE id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
 UPDATE tenants SET mfa_required = true, public_sharing_enabled = false
-WHERE id = '22222222-2222-2222-2222-222222222222';
+WHERE id = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e';
 
 -- ============================================================================
 -- DEMO DEPARTMENTS
 -- ============================================================================
 
--- Acme Corp departments
+-- ClovaLink departments
 INSERT INTO departments (id, tenant_id, name, description) VALUES
-    ('d1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'Finance', 'Financial operations and accounting'),
-    ('d2222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Legal', 'Legal affairs and compliance'),
-    ('d3333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'Human Resources', 'Employee management and HR operations'),
-    ('d4444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'Engineering', 'Software development and technical operations')
+    ('d1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Finance', 'Financial operations and accounting'),
+    ('d2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Legal', 'Legal affairs and compliance'),
+    ('d3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Human Resources', 'Employee management and HR operations'),
+    ('d4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Engineering', 'Software development and technical operations')
 ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- Globex Inc departments
 INSERT INTO departments (id, tenant_id, name, description) VALUES
-    ('d5555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', 'Operations', 'Business operations'),
-    ('d6666666-6666-6666-6666-666666666666', '22222222-2222-2222-2222-222222222222', 'Sales', 'Sales and marketing')
+    ('d5e6f7a8-c9d0-4e1f-2a3b-4c5d6e7f8a9b', 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'Operations', 'Business operations'),
+    ('d6f7a8b9-d0e1-4f2a-3b4c-5d6e7f8a9b0c', 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'Sales', 'Sales and marketing')
 ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- ============================================================================
@@ -133,24 +133,24 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- SuperAdmin (password: password123)
 INSERT INTO users (id, tenant_id, email, name, password_hash, role, status) VALUES
-    ('00000000-0000-0000-0000-000000000000', '11111111-1111-1111-1111-111111111111', 'superadmin@clovalink.com', 'Super Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'SuperAdmin', 'active')
+    ('00a1b2c3-d4e5-4f6a-7b8c-9d0e1f2a3b4c', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'superadmin@clovalink.com', 'Super Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'SuperAdmin', 'active')
 ON CONFLICT DO NOTHING;
 
--- Acme Corp users
+-- ClovaLink users
 INSERT INTO users (id, tenant_id, email, name, password_hash, role, status) VALUES
-    ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'admin@acme.com', 'Admin User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'active'),
-    ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '11111111-1111-1111-1111-111111111111', 'manager@acme.com', 'Manager User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Manager', 'active'),
-    ('cccccccc-cccc-cccc-cccc-cccccccccccc', '11111111-1111-1111-1111-111111111111', 'employee@acme.com', 'Employee User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Employee', 'active')
+    ('0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'admin@clovalink.com', 'Admin User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'active'),
+    ('0b2c3d4e-5f6a-4b8c-9d0e-1f2a3b4c5d6e', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'manager@clovalink.com', 'Manager User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Manager', 'active'),
+    ('0c3d4e5f-6a7b-4c9d-0e1f-2a3b4c5d6e7f', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'employee@clovalink.com', 'Employee User', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Employee', 'active')
 ON CONFLICT DO NOTHING;
 
 -- Globex Inc users
 INSERT INTO users (id, tenant_id, email, name, password_hash, role, status) VALUES
-    ('dddddddd-dddd-dddd-dddd-dddddddddddd', '22222222-2222-2222-2222-222222222222', 'admin@globex.com', 'Globex Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'active')
+    ('0d4e5f6a-7b8c-4d9e-0f1a-2b3c4d5e6f7a', 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'admin@globex.com', 'Globex Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'active')
 ON CONFLICT DO NOTHING;
 
 -- Soylent Corp users
 INSERT INTO users (id, tenant_id, email, name, password_hash, role, status) VALUES
-    ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '33333333-3333-3333-3333-333333333333', 'admin@soylent.com', 'Soylent Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'inactive')
+    ('0e5f6a7b-8c9d-4e0f-1a2b-3c4d5e6f7a8b', 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 'admin@soylent.com', 'Soylent Admin', '$argon2id$v=19$m=19456,t=2,p=1$ZZQeowa8qOIGQziIPCF9kg$yGQS+h+6nGq+E8Aol7Uq0mAeeWYCHlKk4yexS97wiHU', 'Admin', 'inactive')
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -158,72 +158,72 @@ ON CONFLICT DO NOTHING;
 -- ============================================================================
 
 INSERT INTO file_requests (tenant_id, name, destination_path, token, created_by, expires_at, status, upload_count) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'Q4 Financials', '/Finance/2024', 'demo-token-001', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NOW() + INTERVAL '30 days', 'active', 3),
-    ('11111111-1111-1111-1111-111111111111', 'Vendor Contracts', '/Legal/Contracts', 'demo-token-002', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NOW() + INTERVAL '15 days', 'active', 12),
-    ('22222222-2222-2222-2222-222222222222', 'Marketing Assets', '/Marketing/2024', 'demo-token-003', 'dddddddd-dddd-dddd-dddd-dddddddddddd', NOW() - INTERVAL '5 days', 'expired', 25)
+    ('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Q4 Financials', '/Finance/2024', 'demo-token-001', '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NOW() + INTERVAL '30 days', 'active', 3),
+    ('a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Vendor Contracts', '/Legal/Contracts', 'demo-token-002', '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NOW() + INTERVAL '15 days', 'active', 12),
+    ('b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 'Marketing Assets', '/Marketing/2024', 'demo-token-003', '0d4e5f6a-7b8c-4d9e-0f1a-2b3c4d5e6f7a', NOW() - INTERVAL '5 days', 'expired', 25)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
 -- DEMO FOLDERS
 -- ============================================================================
 
--- Root folders for Acme Corp (visible as company folders)
+-- Root folders for ClovaLink (visible as company folders)
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, is_directory, owner_id, parent_path, visibility, is_company_folder)
 VALUES
     -- Projects folder (shared company folder)
-    ('f0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', NULL, 
-     'Projects', '11111111-1111-1111-1111-111111111111/Projects/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 'department', true)
+    ('f0a1b2c3-d4e5-4f6a-7b8c-9d0e1f2a3b01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', NULL, 
+     'Projects', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Projects/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'department', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Finance folders
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f0000001-0001-0001-0001-000000000001', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Finance', '11111111-1111-1111-1111-111111111111/Finance/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 'department'),
-    ('f0000001-0001-0001-0001-000000000002', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     '2024', '11111111-1111-1111-1111-111111111111/Finance/2024/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance', 'department'),
-    ('f0000001-0001-0001-0001-000000000003', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Invoices', '11111111-1111-1111-1111-111111111111/Finance/Invoices/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance', 'department')
+    ('f1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Finance', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'department'),
+    ('f1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     '2024', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/2024/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance', 'department'),
+    ('f1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c03', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Invoices', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/Invoices/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Legal folders
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f0000002-0002-0002-0002-000000000001', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'Legal', '11111111-1111-1111-1111-111111111111/Legal/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 'department'),
-    ('f0000002-0002-0002-0002-000000000002', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'Contracts', '11111111-1111-1111-1111-111111111111/Legal/Contracts/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Legal', 'department'),
-    ('f0000002-0002-0002-0002-000000000003', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'Policies', '11111111-1111-1111-1111-111111111111/Legal/Policies/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Legal', 'department')
+    ('f2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'Legal', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'department'),
+    ('f2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'Contracts', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/Contracts/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Legal', 'department'),
+    ('f2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d03', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'Policies', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/Policies/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Legal', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Human Resources folders
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f0000003-0003-0003-0003-000000000001', '11111111-1111-1111-1111-111111111111', 'd3333333-3333-3333-3333-333333333333', 
-     'Human Resources', '11111111-1111-1111-1111-111111111111/Human Resources/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 'department'),
-    ('f0000003-0003-0003-0003-000000000002', '11111111-1111-1111-1111-111111111111', 'd3333333-3333-3333-3333-333333333333', 
-     'Onboarding', '11111111-1111-1111-1111-111111111111/Human Resources/Onboarding/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Human Resources', 'department')
+    ('f3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 
+     'Human Resources', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Human Resources/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'department'),
+    ('f3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 
+     'Onboarding', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Human Resources/Onboarding/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Human Resources', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Engineering folders
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f0000004-0004-0004-0004-000000000001', '11111111-1111-1111-1111-111111111111', 'd4444444-4444-4444-4444-444444444444', 
-     'Engineering', '11111111-1111-1111-1111-111111111111/Engineering/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 'department'),
-    ('f0000004-0004-0004-0004-000000000002', '11111111-1111-1111-1111-111111111111', 'd4444444-4444-4444-4444-444444444444', 
-     'Documentation', '11111111-1111-1111-1111-111111111111/Engineering/Documentation/', 0, true, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Engineering', 'department')
+    ('f4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a', 
+     'Engineering', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Engineering/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'department'),
+    ('f4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a', 
+     'Documentation', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Engineering/Documentation/', 0, true, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Engineering', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
@@ -233,61 +233,61 @@ ON CONFLICT (id) DO NOTHING;
 -- Finance files
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, content_type, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f1000001-1001-1001-1001-000000000001', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Q1_Budget.xlsx', '11111111-1111-1111-1111-111111111111/Finance/2024/Q1_Budget.xlsx', 24576, 
+    ('f5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Q1_Budget.xlsx', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/2024/Q1_Budget.xlsx', 24576, 
      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance/2024', 'department'),
-    ('f1000001-1001-1001-1001-000000000002', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Q2_Report.pdf', '11111111-1111-1111-1111-111111111111/Finance/2024/Q2_Report.pdf', 156789, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance/2024', 'department'),
+    ('f5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Q2_Report.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/2024/Q2_Report.pdf', 156789, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance/2024', 'department'),
-    ('f1000001-1001-1001-1001-000000000003', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Annual_Forecast.xlsx', '11111111-1111-1111-1111-111111111111/Finance/2024/Annual_Forecast.xlsx', 35840, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance/2024', 'department'),
+    ('f5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a03', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Annual_Forecast.xlsx', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/2024/Annual_Forecast.xlsx', 35840, 
      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance/2024', 'department'),
-    ('f1000001-1001-1001-1001-000000000004', '11111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111', 
-     'Invoice_Template.pdf', '11111111-1111-1111-1111-111111111111/Finance/Invoices/Invoice_Template.pdf', 45678, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance/2024', 'department'),
+    ('f5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8a04', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd1a2b3c4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 
+     'Invoice_Template.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Finance/Invoices/Invoice_Template.pdf', 45678, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Finance/Invoices', 'department')
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Finance/Invoices', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Legal files
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, content_type, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f2000001-2001-2001-2001-000000000001', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'Vendor_Agreement.pdf', '11111111-1111-1111-1111-111111111111/Legal/Contracts/Vendor_Agreement.pdf', 234567, 
+    ('f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'Vendor_Agreement.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/Contracts/Vendor_Agreement.pdf', 234567, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Legal/Contracts', 'department'),
-    ('f2000001-2001-2001-2001-000000000002', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'NDA_Template.docx', '11111111-1111-1111-1111-111111111111/Legal/Contracts/NDA_Template.docx', 28672, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Legal/Contracts', 'department'),
+    ('f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'NDA_Template.docx', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/Contracts/NDA_Template.docx', 28672, 
      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Legal/Contracts', 'department'),
-    ('f2000001-2001-2001-2001-000000000003', '11111111-1111-1111-1111-111111111111', 'd2222222-2222-2222-2222-222222222222', 
-     'Employee_Handbook.pdf', '11111111-1111-1111-1111-111111111111/Legal/Policies/Employee_Handbook.pdf', 512000, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Legal/Contracts', 'department'),
+    ('f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8a9b03', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e', 
+     'Employee_Handbook.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Legal/Policies/Employee_Handbook.pdf', 512000, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Legal/Policies', 'department')
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Legal/Policies', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Human Resources files
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, content_type, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f3000001-3001-3001-3001-000000000001', '11111111-1111-1111-1111-111111111111', 'd3333333-3333-3333-3333-333333333333', 
-     'Welcome_Guide.pdf', '11111111-1111-1111-1111-111111111111/Human Resources/Onboarding/Welcome_Guide.pdf', 89012, 
+    ('f7b8c9d0-e1f2-4a3b-4c5d-6e7f8a9b0c01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 
+     'Welcome_Guide.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Human Resources/Onboarding/Welcome_Guide.pdf', 89012, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Human Resources/Onboarding', 'department'),
-    ('f3000001-3001-3001-3001-000000000002', '11111111-1111-1111-1111-111111111111', 'd3333333-3333-3333-3333-333333333333', 
-     'Benefits_Overview.xlsx', '11111111-1111-1111-1111-111111111111/Human Resources/Onboarding/Benefits_Overview.xlsx', 18432, 
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Human Resources/Onboarding', 'department'),
+    ('f7b8c9d0-e1f2-4a3b-4c5d-6e7f8a9b0c02', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', 
+     'Benefits_Overview.xlsx', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Human Resources/Onboarding/Benefits_Overview.xlsx', 18432, 
      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Human Resources/Onboarding', 'department')
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Human Resources/Onboarding', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- Engineering files
 INSERT INTO files_metadata (id, tenant_id, department_id, name, storage_path, size_bytes, content_type, is_directory, owner_id, parent_path, visibility)
 VALUES
-    ('f4000001-4001-4001-4001-000000000001', '11111111-1111-1111-1111-111111111111', 'd4444444-4444-4444-4444-444444444444', 
-     'API_Spec.pdf', '11111111-1111-1111-1111-111111111111/Engineering/Documentation/API_Spec.pdf', 145678, 
+    ('f8c9d0e1-f2a3-4b4c-5d6e-7f8a9b0c1d01', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'd4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a', 
+     'API_Spec.pdf', 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/Engineering/Documentation/API_Spec.pdf', 145678, 
      'application/pdf', false, 
-     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Engineering/Documentation', 'department')
+     '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d', 'Engineering/Documentation', 'department')
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
@@ -298,11 +298,11 @@ UPDATE tenants
 SET storage_used_bytes = (
     SELECT COALESCE(SUM(size_bytes), 0) 
     FROM files_metadata 
-    WHERE tenant_id = '11111111-1111-1111-1111-111111111111' 
+    WHERE tenant_id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d' 
     AND is_directory = false 
     AND is_deleted = false
 )
-WHERE id = '11111111-1111-1111-1111-111111111111';
+WHERE id = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
 -- ============================================================================
 -- DEFAULT NOTIFICATION PREFERENCES
