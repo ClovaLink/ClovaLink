@@ -2194,7 +2194,8 @@ pub async fn delete_file(
 
 #[derive(serde::Deserialize)]
 pub struct ListTrashParams {
-    department_id: Option<String>,  // For admin viewing specific department's trash
+    owner_id: Option<String>,       // For viewing specific user's trash (User Details Modal)
+    department_id: Option<String>,  // For filtering by department (main Recycle Bin page)
 }
 
 pub async fn list_trash(
@@ -2205,9 +2206,19 @@ pub async fn list_trash(
 ) -> Result<Json<Value>, StatusCode> {
     let tenant_id = Uuid::parse_str(&company_id).map_err(|_| StatusCode::BAD_REQUEST)?;
     
-    // Determine department filter for admins
+    // Parse owner_id filter (for User Details Modal - viewing specific user's trash)
+    let target_owner = if let Some(ref oid) = params.owner_id {
+        if (auth.role == "SuperAdmin" || auth.role == "Admin") && !oid.is_empty() {
+            Uuid::parse_str(oid).ok()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    
+    // Parse department_id filter (for main Recycle Bin page)
     let target_department = if let Some(ref did) = params.department_id {
-        // Only admins can filter by department
         if (auth.role == "SuperAdmin" || auth.role == "Admin") && !did.is_empty() {
             Uuid::parse_str(did).ok()
         } else {
@@ -2217,9 +2228,22 @@ pub async fn list_trash(
         None
     };
     
-    // Build query based on role and department filter - JOIN with users to get owner_name
-    let rows = if let Some(dept_id) = target_department {
-        // Admin filtering by department
+    // Build query based on filters - owner_id takes precedence over department_id
+    let rows = if let Some(owner) = target_owner {
+        // Admin viewing specific user's trash (User Details Modal)
+        sqlx::query(
+            r#"SELECT fm.id, fm.name, fm.parent_path, fm.size_bytes, fm.is_directory, fm.deleted_at, fm.owner_id, fm.visibility, u.name as owner_name
+               FROM files_metadata fm
+               LEFT JOIN users u ON fm.owner_id = u.id
+               WHERE fm.tenant_id = $1 AND fm.is_deleted = true AND fm.owner_id = $2
+               ORDER BY fm.deleted_at DESC"#
+        )
+        .bind(tenant_id)
+        .bind(owner)
+        .fetch_all(&state.pool)
+        .await
+    } else if let Some(dept_id) = target_department {
+        // Admin filtering by department (main Recycle Bin page)
         sqlx::query(
             r#"SELECT fm.id, fm.name, fm.parent_path, fm.size_bytes, fm.is_directory, fm.deleted_at, fm.owner_id, fm.visibility, u.name as owner_name
                FROM files_metadata fm
