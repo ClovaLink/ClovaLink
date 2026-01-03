@@ -20,6 +20,7 @@ use clovalink_auth::AuthUser;
 use clovalink_core::models::FileMetadata;
 use sqlx::Row;
 use clovalink_core::security_service;
+use clovalink_core::notification_service;
 
 /// Format bytes into human-readable string
 fn format_bytes(bytes: i64) -> String {
@@ -729,7 +730,7 @@ pub async fn upload_file(
 /// - Department files: user must be in the same department
 /// 
 /// action parameter is for future audit logging differentiation (read/write/delete)
-async fn can_access_file(
+pub async fn can_access_file(
     pool: &sqlx::PgPool,
     file_id: Uuid,
     tenant_id: Uuid,
@@ -761,13 +762,24 @@ async fn can_access_file(
         let is_locker = locked_by == Some(user_id);
         let is_owner = owner_id == Some(user_id);
         
+        // Role hierarchy for permission checking
+        let role_level = |role: &str| -> i32 {
+            match role {
+                "SuperAdmin" => 100,
+                "Admin" => 80,
+                "Manager" => 60,
+                "Employee" => 40,
+                _ => 20, // Custom roles
+            }
+        };
+        
         // Check if user has the required role for this lock
-        let has_required_role = match lock_requires_role.as_deref() {
-            Some("Manager") => user_role == "Manager",
-            Some("Admin") => false, // Already handled above
-            Some("SuperAdmin") => false, // Already handled above
-            Some(custom_role) => user_role == custom_role,
-            None => false, // No role requirement, only locker/owner can access
+        let has_required_role = if let Some(ref req_role) = lock_requires_role {
+            let user_level = role_level(user_role);
+            let required_level = role_level(req_role);
+            user_level >= required_level
+        } else {
+            false // No role requirement - only locker/owner can access
         };
         
         if !is_locker && !is_owner && !has_required_role {
@@ -883,8 +895,8 @@ pub async fn list_files(
     let role = user.as_ref().map(|u| u.1.clone()).unwrap_or_default();
     let user_allowed_department_ids = user.as_ref().and_then(|u| u.2.clone());
 
-    // Build query
-    let mut query = String::from("SELECT * FROM files_metadata WHERE tenant_id = $1 AND is_deleted = false");
+    // Build query - exclude files that are in a group (they appear inside the group view)
+    let mut query = String::from("SELECT * FROM files_metadata WHERE tenant_id = $1 AND is_deleted = false AND group_id IS NULL");
     
     // Visibility filter based on requested view mode
     let view_mode = params.visibility.as_deref().unwrap_or("department");
@@ -1795,8 +1807,8 @@ pub async fn download_file(
         .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_LENGTH, stream_size)
         .header(header::CONTENT_DISPOSITION, safe_disposition)
-        // CDN optimization headers (for proxy fallback)
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        // SECURITY: No caching to prevent cached files being accessible after permission changes
+        .header(header::CACHE_CONTROL, "no-store, no-cache, must-revalidate, private")
         .header(header::ETAG, etag)
         .header("X-Content-Type-Options", "nosniff")
         .body(body)
@@ -2621,6 +2633,108 @@ pub async fn update_prefs(
     Ok(Json(payload))
 }
 
+// ==================== Toggle Star (with access check) ====================
+
+/// Toggle star status for a file, with access control check
+/// POST /api/files/{company_id}/{file_id}/star
+pub async fn toggle_star(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthUser>,
+    Path((company_id, file_id)): Path<(String, String)>,
+) -> Result<Json<Value>, StatusCode> {
+    let tenant_id = Uuid::parse_str(&company_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let file_uuid = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Verify tenant access
+    if auth.role != "SuperAdmin" && auth.tenant_id != tenant_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // SECURITY: Check if user has permission to access this file (required for starring)
+    if !can_access_file(&state.pool, file_uuid, tenant_id, auth.user_id, &auth.role, "read").await? {
+        tracing::warn!(
+            "Access denied: user {} attempted to star file {} without permission",
+            auth.user_id, file_uuid
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Load current prefs for this user
+    let prefs_key = format!(".clovalink/{}/user_{}_prefs.json", company_id, auth.user_id);
+    let mut prefs: Value = match state.storage.download(&prefs_key).await {
+        Ok(data) => serde_json::from_slice(&data).unwrap_or(json!({ "starred": [], "settings": {} })),
+        Err(_) => json!({ "starred": [], "settings": {} }),
+    };
+
+    // Get current starred list
+    let starred = prefs.get_mut("starred")
+        .and_then(|v| v.as_array_mut());
+    
+    let file_id_str = file_id.clone();
+    let is_now_starred: bool;
+    
+    if let Some(starred_list) = starred {
+        // Check if already starred
+        let existing_idx = starred_list.iter().position(|v| v.as_str() == Some(&file_id_str));
+        
+        if let Some(idx) = existing_idx {
+            // Remove star
+            starred_list.remove(idx);
+            is_now_starred = false;
+        } else {
+            // Add star
+            starred_list.push(json!(file_id_str));
+            is_now_starred = true;
+        }
+    } else {
+        // Initialize starred array with this file
+        prefs["starred"] = json!([file_id_str]);
+        is_now_starred = true;
+    }
+
+    // Ensure dir exists and save prefs
+    let dir = format!(".clovalink/{}", company_id);
+    let _ = state.storage.create_folder(&dir).await;
+    
+    let data = serde_json::to_vec(&prefs).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state.storage.upload(&prefs_key, data).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "file_id": file_id,
+        "is_starred": is_now_starred
+    })))
+}
+
+/// Get user's starred files
+/// GET /api/files/{company_id}/starred
+pub async fn get_starred(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthUser>,
+    Path(company_id): Path<String>,
+) -> Result<Json<Value>, StatusCode> {
+    let tenant_id = Uuid::parse_str(&company_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Verify tenant access
+    if auth.role != "SuperAdmin" && auth.tenant_id != tenant_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Load user's prefs
+    let prefs_key = format!(".clovalink/{}/user_{}_prefs.json", company_id, auth.user_id);
+    let prefs: Value = match state.storage.download(&prefs_key).await {
+        Ok(data) => serde_json::from_slice(&data).unwrap_or(json!({ "starred": [] })),
+        Err(_) => json!({ "starred": [] }),
+    };
+
+    let starred = prefs.get("starred")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    Ok(Json(json!({ "starred": starred })))
+}
+
 // ==================== File Locking ====================
 
 #[derive(Debug, serde::Deserialize, Default)]
@@ -2971,6 +3085,7 @@ pub struct MoveFileInput {
     pub target_parent_id: Option<String>,      // UUID of target folder, null for root
     pub target_department_id: Option<String>,  // UUID of target department (for cross-department moves)
     pub target_visibility: Option<String>,     // 'department' or 'private' (for moving between views)
+    pub new_name: Option<String>,              // Optional new name if renaming during move
 }
 
 pub async fn move_file(
@@ -3010,7 +3125,10 @@ pub async fn move_file(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let (file_name, current_parent_path, is_locked, is_directory, current_dept_id, current_visibility) = file.ok_or(StatusCode::NOT_FOUND)?;
+    let (original_name, current_parent_path, is_locked, is_directory, current_dept_id, current_visibility) = file.ok_or(StatusCode::NOT_FOUND)?;
+
+    // Use new_name if provided, otherwise keep original name
+    let file_name = input.new_name.clone().unwrap_or(original_name.clone());
 
     // Cannot move locked files
     if is_locked {
@@ -3118,12 +3236,30 @@ pub async fn move_file(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if duplicate_check.is_some() {
-        return Ok(Json(json!({ "error": "A file with this name already exists in the target folder" })));
+        // Generate a suggested name by appending (1), (2), etc.
+        let name_without_ext = std::path::Path::new(&file_name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&file_name);
+        let extension = std::path::Path::new(&file_name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|e| format!(".{}", e))
+            .unwrap_or_default();
+        
+        let suggested_name = format!("{} (1){}", name_without_ext, extension);
+        
+        return Ok(Json(json!({ 
+            "error": format!("A file named \"{}\" already exists in this location", file_name),
+            "duplicate": true,
+            "conflicting_name": file_name,
+            "suggested_name": suggested_name
+        })));
     }
 
     // CONTENT-ADDRESSED STORAGE: Move is metadata-only, never touches S3
     // The storage_path is immutable (based on content hash), only metadata changes
-    // Update metadata: parent_path, department_id, visibility
+    // Update metadata: parent_path, department_id, visibility, and optionally name
     // When moving to private visibility, set owner_id to the user doing the move
     sqlx::query(
         r#"
@@ -3131,6 +3267,7 @@ pub async fn move_file(
         SET parent_path = $1, 
             department_id = $2, 
             visibility = $3, 
+            name = $7,
             owner_id = CASE WHEN $3 = 'private' THEN $5 ELSE owner_id END,
             updated_at = NOW()
         WHERE id = $4 AND tenant_id = $6
@@ -3142,6 +3279,7 @@ pub async fn move_file(
     .bind(file_uuid)
     .bind(auth.user_id)
     .bind(tenant_id)
+    .bind(&file_name)
     .execute(&state.pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -3239,6 +3377,256 @@ pub async fn move_file(
     Ok(Json(json!({
         "message": "File moved successfully",
         "new_path": new_parent_path
+    })))
+}
+
+// ==================== Copy File ====================
+
+#[derive(Debug, serde::Deserialize)]
+pub struct CopyFileInput {
+    pub target_parent_id: Option<String>,      // UUID of target folder, null for root
+    pub target_parent_path: Option<String>,    // Alternative: path string (used if target_parent_id is null)
+    pub target_department_id: Option<String>,  // UUID of target department
+    pub target_visibility: Option<String>,     // 'department' or 'private'
+}
+
+/// Copy a file to a new location with auto-rename
+/// POST /api/files/{company_id}/{file_id}/copy
+pub async fn copy_file(
+    State(state): State<Arc<AppState>>,
+    Extension(auth): Extension<AuthUser>,
+    Path((company_id, file_id)): Path<(String, String)>,
+    Json(input): Json<CopyFileInput>,
+) -> Result<Json<Value>, StatusCode> {
+    let tenant_id = Uuid::parse_str(&company_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let file_uuid = Uuid::parse_str(&file_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Verify tenant access
+    if auth.role != "SuperAdmin" && auth.tenant_id != tenant_id {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // SECURITY: Check if user has permission to read this file
+    if !can_access_file(&state.pool, file_uuid, tenant_id, auth.user_id, &auth.role, "read").await? {
+        tracing::warn!(
+            "Access denied: user {} attempted to copy file {} without permission",
+            auth.user_id, file_uuid
+        );
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Get original file info
+    let file: Option<(String, String, i64, Option<String>, bool, Option<Uuid>)> = sqlx::query_as(
+        r#"
+        SELECT name, storage_path, size_bytes, content_type, is_directory, department_id
+        FROM files_metadata 
+        WHERE id = $1 AND tenant_id = $2 AND is_deleted = false
+        "#
+    )
+    .bind(file_uuid)
+    .bind(tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (original_name, storage_path, size_bytes, content_type, is_directory, current_dept_id) = file.ok_or(StatusCode::NOT_FOUND)?;
+
+    // Cannot copy directories (for now)
+    if is_directory {
+        return Ok(Json(json!({ "error": "Cannot copy directories. Please copy individual files." })));
+    }
+
+    // Parse target folder
+    let target_parent_id: Option<Uuid> = if let Some(ref id_str) = input.target_parent_id {
+        if id_str.is_empty() || id_str == "null" {
+            None
+        } else {
+            Some(Uuid::parse_str(id_str).map_err(|_| StatusCode::BAD_REQUEST)?)
+        }
+    } else {
+        None
+    };
+
+    // Parse target department
+    let target_dept_id: Option<Uuid> = if let Some(ref id_str) = input.target_department_id {
+        if id_str.is_empty() || id_str == "null" {
+            None
+        } else {
+            Some(Uuid::parse_str(id_str).map_err(|_| StatusCode::BAD_REQUEST)?)
+        }
+    } else {
+        current_dept_id
+    };
+
+    // Parse target visibility
+    let target_visibility = input.target_visibility.as_deref().unwrap_or("department");
+    let target_visibility = if target_visibility == "private" { "private" } else { "department" };
+
+    // Get target parent path - from ID if provided, otherwise use direct path
+    let target_parent_path: Option<String> = if let Some(target_id) = target_parent_id {
+        let target_folder: Option<(String, Option<String>)> = sqlx::query_as(
+            r#"
+            SELECT name, parent_path FROM files_metadata 
+            WHERE id = $1 AND tenant_id = $2 AND is_directory = true AND is_deleted = false
+            "#
+        )
+        .bind(target_id)
+        .bind(tenant_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        let (folder_name, folder_parent) = target_folder.ok_or(StatusCode::NOT_FOUND)?;
+        
+        Some(if let Some(ref fp) = folder_parent {
+            if fp.is_empty() { folder_name } else { format!("{}/{}", fp, folder_name) }
+        } else {
+            folder_name
+        })
+    } else if let Some(ref path) = input.target_parent_path {
+        // Use the path directly if provided
+        if path.is_empty() { None } else { Some(path.clone()) }
+    } else {
+        None
+    };
+
+    // Generate copy name: "filename - Copy.ext", check for conflicts
+    let name_without_ext = std::path::Path::new(&original_name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&original_name);
+    let extension = std::path::Path::new(&original_name)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|e| format!(".{}", e))
+        .unwrap_or_default();
+    
+    let mut copy_name = format!("{} - Copy{}", name_without_ext, extension);
+    let mut attempt = 2;
+    
+    // Check for name conflicts and increment if needed (include visibility in check)
+    loop {
+        let exists: Option<(i32,)> = sqlx::query_as(
+            r#"
+            SELECT 1 FROM files_metadata 
+            WHERE tenant_id = $1 AND name = $2 AND is_deleted = false AND visibility = $4
+            AND (($3::text IS NULL AND parent_path IS NULL) OR ($3::text IS NOT NULL AND parent_path = $3))
+            "#
+        )
+        .bind(tenant_id)
+        .bind(&copy_name)
+        .bind(&target_parent_path)
+        .bind(target_visibility)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to check for duplicate filename: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        
+        if exists.is_none() {
+            break;
+        }
+        
+        copy_name = format!("{} - Copy ({}){}", name_without_ext, attempt, extension);
+        attempt += 1;
+        
+        if attempt > 100 {
+            return Ok(Json(json!({ "error": "Too many copies exist. Please rename some files." })));
+        }
+    }
+
+    // DEDUPLICATION: Just create a new DB record pointing to the SAME S3 file
+    // No need to download/upload - saves bandwidth and storage
+    let new_file_id = Uuid::new_v4();
+    let new_ulid = ulid::Ulid::new().to_string();
+    let owner_id = if target_visibility == "private" { Some(auth.user_id) } else { None };
+    
+    sqlx::query(
+        r#"
+        INSERT INTO files_metadata (
+            id, tenant_id, department_id, name, storage_path, size_bytes, 
+            content_type, is_directory, owner_id, parent_path, visibility, ulid
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9, $10, $11)
+        "#
+    )
+    .bind(new_file_id)
+    .bind(tenant_id)
+    .bind(target_dept_id)
+    .bind(&copy_name)
+    .bind(&storage_path)  // SAME storage path as original - deduplication!
+    .bind(size_bytes)
+    .bind(&content_type)
+    .bind(owner_id)
+    .bind(&target_parent_path)
+    .bind(target_visibility)
+    .bind(&new_ulid)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed to create file metadata for copy: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    // Audit log
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO audit_logs (tenant_id, user_id, action, resource_type, resource_id, metadata, ip_address)
+        VALUES ($1, $2, 'file_copied', 'file', $3, $4, $5::inet)
+        "#
+    )
+    .bind(tenant_id)
+    .bind(auth.user_id)
+    .bind(new_file_id)
+    .bind(json!({
+        "original_file_id": file_uuid,
+        "original_name": original_name,
+        "copy_name": copy_name,
+        "target_path": target_parent_path,
+    }))
+    .bind(&auth.ip_address)
+    .execute(&state.pool)
+    .await;
+
+    tracing::info!(
+        user_id = %auth.user_id,
+        original_file = %file_uuid,
+        new_file = %new_file_id,
+        copy_name = %copy_name,
+        "File copied successfully"
+    );
+
+    // Copy AI summary if one exists for the original file (same content, no need to re-summarize)
+    let _ = sqlx::query(
+        r#"
+        INSERT INTO file_summaries (file_id, tenant_id, summary, content_hash)
+        SELECT $1, tenant_id, summary, content_hash
+        FROM file_summaries
+        WHERE file_id = $2 AND tenant_id = $3
+        ON CONFLICT (file_id) DO NOTHING
+        "#
+    )
+    .bind(new_file_id)
+    .bind(file_uuid)
+    .bind(tenant_id)
+    .execute(&state.pool)
+    .await;
+
+    // Invalidate cache
+    if let Some(ref cache) = state.cache {
+        let pattern = format!("clovalink:files:{}:*", tenant_id);
+        let _ = cache.delete_pattern(&pattern).await;
+    }
+
+    Ok(Json(json!({
+        "success": true,
+        "message": format!("File copied as \"{}\"", copy_name),
+        "file": {
+            "id": new_file_id,
+            "name": copy_name,
+            "path": target_parent_path,
+        }
     })))
 }
 
@@ -3587,6 +3975,9 @@ pub struct CreateShareInput {
     /// - 'permissioned': User must have can_access_file permission to download
     /// - 'tenant_wide': Any authenticated user in the tenant can download
     share_policy: Option<String>,
+    /// Optional: Share with a specific user (user-specific sharing)
+    /// If provided, only this user can access the share (plus the creator)
+    shared_with_user_id: Option<String>,
 }
 
 /// Create a share link for a file
@@ -3649,11 +4040,30 @@ pub async fn create_file_share(
         _ => "permissioned", // Default to most secure option
     };
     
+    // Parse and validate shared_with_user_id if provided
+    let shared_with_user_id: Option<Uuid> = if let Some(ref user_id_str) = input.shared_with_user_id {
+        let recipient_id = Uuid::parse_str(user_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        
+        // Validate sharing is allowed with this user (tenant/department restrictions)
+        if !crate::sharing::can_share_with_user(&state.pool, auth.user_id, tenant_id, &auth.role, recipient_id).await? {
+            tracing::warn!(
+                sharer = %auth.user_id, 
+                recipient = %recipient_id, 
+                "Share blocked - user not in accessible departments"
+            );
+            return Err(StatusCode::FORBIDDEN);
+        }
+        
+        Some(recipient_id)
+    } else {
+        None
+    };
+    
     // Insert share record
     let share_id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO file_shares (file_id, tenant_id, token, created_by, is_public, expires_at, is_directory, share_policy)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO file_shares (file_id, tenant_id, token, created_by, is_public, expires_at, is_directory, share_policy, shared_with_user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
         "#
     )
@@ -3665,12 +4075,20 @@ pub async fn create_file_share(
     .bind(expires_at)
     .bind(is_directory)
     .bind(share_policy)
+    .bind(shared_with_user_id)
     .fetch_one(&state.pool)
     .await
     .map_err(|e| {
         tracing::error!("Failed to create file share: {:?}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    
+    // Get sharer's name for notifications
+    let sharer_name: String = sqlx::query_scalar("SELECT name FROM users WHERE id = $1")
+        .bind(auth.user_id)
+        .fetch_one(&state.pool)
+        .await
+        .unwrap_or_else(|_| "Someone".to_string());
     
     // Log the share creation
     let _ = sqlx::query(
@@ -3688,6 +4106,7 @@ pub async fn create_file_share(
         "is_public": is_public,
         "is_directory": is_directory,
         "expires_at": expires_at,
+        "shared_with_user_id": shared_with_user_id,
     }))
     .bind(&auth.ip_address)
     .execute(&state.pool)
@@ -3703,14 +4122,73 @@ pub async fn create_file_share(
     ).await;
     
     let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let share_link = format!("{}/share/{}", base_url, token);
+    
+    // Send notifications if sharing with a specific user
+    if let Some(recipient_id) = shared_with_user_id {
+        // Get recipient info for notifications
+        let recipient_info: Option<(String, String)> = sqlx::query_as(
+            "SELECT email, role FROM users WHERE id = $1"
+        )
+        .bind(recipient_id)
+        .fetch_optional(&state.pool)
+        .await
+        .ok()
+        .flatten();
+        
+        // Get tenant info for notifications
+        let tenant: Option<clovalink_core::models::Tenant> = sqlx::query_as(
+            "SELECT * FROM tenants WHERE id = $1"
+        )
+        .bind(tenant_id)
+        .fetch_optional(&state.pool)
+        .await
+        .ok()
+        .flatten();
+        
+        // Send in-app and email notification
+        if let (Some((recipient_email, recipient_role)), Some(tenant)) = (recipient_info, tenant.clone()) {
+            let pool = state.pool.clone();
+            let file_name_clone = file_name.clone();
+            let sharer_name_clone = sharer_name.clone();
+            tokio::spawn(async move {
+                let _ = notification_service::notify_file_shared(
+                    &pool,
+                    &tenant,
+                    recipient_id,
+                    &recipient_email,
+                    &recipient_role,
+                    &sharer_name_clone,
+                    &file_name_clone,
+                    file_uuid,
+                ).await;
+            });
+        }
+        
+        // Send Discord notification
+        let pool = state.pool.clone();
+        let file_name_clone = file_name.clone();
+        let link_clone = share_link.clone();
+        tokio::spawn(async move {
+            crate::discord::notify_file_shared(
+                &pool,
+                tenant_id,
+                recipient_id,
+                &file_name_clone,
+                &sharer_name,
+                Some(&link_clone),
+            ).await;
+        });
+    }
     
     Ok(Json(json!({
         "id": share_id,
         "token": token,
-        "link": format!("{}/share/{}", base_url, token),
+        "link": share_link,
         "is_public": is_public,
         "is_directory": is_directory,
         "expires_at": expires_at,
+        "shared_with_user_id": shared_with_user_id,
     })))
 }
 

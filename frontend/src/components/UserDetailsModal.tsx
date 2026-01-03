@@ -36,7 +36,7 @@ interface ActivityLog {
 interface FileItem {
   id: string;
   name: string;
-  type: 'folder' | 'image' | 'document' | 'pdf' | 'spreadsheet' | 'video' | 'audio' | 'code' | 'archive' | 'other';
+  type: 'folder' | 'image' | 'document' | 'pdf' | 'spreadsheet' | 'video' | 'audio' | 'code' | 'archive' | 'other' | 'group';
   size: string;
   size_bytes: number;
   modified: string;
@@ -342,8 +342,8 @@ export function UserDetailsModal({ isOpen, onClose, user }: UserDetailsModalProp
     setIsMoveModalOpen(true);
   };
   
-  const handleMoveFile = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string) => {
-    if (!currentCompany?.id || !fileToMove) return;
+  const handleMoveFile = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string, newName?: string) => {
+    if (!currentCompany?.id || !fileToMove) return { success: false, error: 'No file selected' };
     
     setIsMoving(true);
     try {
@@ -352,11 +352,14 @@ export function UserDetailsModal({ isOpen, onClose, user }: UserDetailsModalProp
         body: JSON.stringify({
           target_parent_id: targetParentId,
           target_department_id: targetDepartmentId,
-          target_visibility: targetVisibility
+          target_visibility: targetVisibility,
+          new_name: newName || null
         })
       });
       
-      if (response.ok) {
+      const data = await response.json().catch(() => ({}));
+      
+      if (response.ok && !data.error) {
         fetchUserFiles();
         setSelectedFiles(prev => {
           const newSet = new Set(prev);
@@ -365,17 +368,23 @@ export function UserDetailsModal({ isOpen, onClose, user }: UserDetailsModalProp
         });
         setIsMoveModalOpen(false);
         setFileToMove(null);
+        return { success: true };
       } else {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to move file');
+        return {
+          success: false,
+          error: data.error || 'Failed to move file',
+          duplicate: data.duplicate || false,
+          conflicting_name: data.conflicting_name,
+          suggested_name: data.suggested_name
+        };
       }
     } finally {
       setIsMoving(false);
     }
   };
   
-  const handleBulkMove = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string) => {
-    if (!currentCompany?.id || selectedFiles.size === 0) return;
+  const handleBulkMove = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string, _newName?: string) => {
+    if (!currentCompany?.id || selectedFiles.size === 0) return { success: false, error: 'No files selected' };
     
     setIsMoving(true);
     let successCount = 0;
@@ -401,6 +410,7 @@ export function UserDetailsModal({ isOpen, onClose, user }: UserDetailsModalProp
     setIsMoveModalOpen(false);
     setFileToMove(null);
     fetchUserFiles();
+    return { success: successCount > 0 };
   };
   
   const handleRestore = async (item: TrashItem) => {

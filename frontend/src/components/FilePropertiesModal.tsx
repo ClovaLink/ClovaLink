@@ -1,10 +1,11 @@
 import { X, Folder, FileText, Image, Film, Music, Lock, Eye, EyeOff, Calendar, User, HardDrive, Building } from 'lucide-react';
 import { format } from 'date-fns';
+import { FileCommentsPanel } from './FileCommentsPanel';
 
 interface FileItem {
     id: string;
     name: string;
-    type: 'folder' | 'image' | 'document' | 'video' | 'audio';
+    type: 'folder' | 'image' | 'document' | 'video' | 'audio' | 'group';
     size?: string;
     size_bytes?: number;
     modified: string;
@@ -20,6 +21,8 @@ interface FileItem {
     department_id?: string;
     content_type?: string;
     storage_path?: string;
+    color?: string;
+    file_count?: number;
 }
 
 interface FilePropertiesModalProps {
@@ -27,6 +30,7 @@ interface FilePropertiesModalProps {
     onClose: () => void;
     file: FileItem | null;
     departmentName?: string;
+    companyId?: string;
 }
 
 const getFileIcon = (type: string) => {
@@ -44,7 +48,7 @@ const getFileIcon = (type: string) => {
     }
 };
 
-export function FilePropertiesModal({ isOpen, onClose, file, departmentName }: FilePropertiesModalProps) {
+export function FilePropertiesModal({ isOpen, onClose, file, departmentName, companyId }: FilePropertiesModalProps) {
     if (!isOpen || !file) return null;
 
     const formatDate = (dateStr?: string) => {
@@ -67,7 +71,7 @@ export function FilePropertiesModal({ isOpen, onClose, file, departmentName }: F
     );
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4">
                 {/* Backdrop */}
                 <div 
@@ -210,6 +214,11 @@ export function FilePropertiesModal({ isOpen, onClose, file, departmentName }: F
                             />
                         </div>
                     </div>
+
+                    {/* Comments Section - only for files, not folders */}
+                    {file.type !== 'folder' && companyId && (
+                        <FileCommentsPanel fileId={file.id} companyId={companyId} />
+                    )}
 
                     {/* Footer */}
                     <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">

@@ -33,6 +33,12 @@ mod password;
 mod health;
 mod api_usage;
 mod virus_scan;
+mod ai;
+mod text_extract;
+mod discord;
+mod comments;
+mod sharing;
+mod groups;
 pub mod compliance;
 pub mod middleware;
 
@@ -613,9 +619,29 @@ async fn main() {
         .route("/api/files/{company_id}/{file_id}/lock", post(handlers::lock_file))
         .route("/api/files/{company_id}/{file_id}/unlock", post(handlers::unlock_file))
         .route("/api/files/{company_id}/{file_id}/move", put(handlers::move_file))
+        .route("/api/files/{company_id}/{file_id}/copy", post(handlers::copy_file))
+        .route("/api/files/{company_id}/{file_id}/star", post(handlers::toggle_star))
+        .route("/api/files/{company_id}/starred", get(handlers::get_starred))
         .route("/api/files/{company_id}/{file_id}/activity", get(handlers::get_file_activity))
         .route("/api/files/{company_id}/{file_id}/company-folder", put(handlers::toggle_company_folder))
         .route("/api/files/{company_id}/{file_id}/share", post(handlers::create_file_share))
+        // File Comments
+        .route("/api/files/{company_id}/{file_id}/comments", get(comments::list_comments).post(comments::create_comment))
+        .route("/api/files/{company_id}/{file_id}/comments/count", get(comments::get_comment_count))
+        .route("/api/files/{company_id}/{file_id}/comments/{comment_id}", put(comments::update_comment).delete(comments::delete_comment))
+        // User-Specific Sharing
+        .route("/api/users/{company_id}/shareable", get(sharing::list_shareable_users))
+        .route("/api/shared-with-me", get(sharing::list_shared_with_me))
+        .route("/api/shared-with-me/copy", post(sharing::copy_to_my_files))
+        // File Groups
+        .route("/api/groups/{company_id}", get(groups::list_groups).post(groups::create_group))
+        .route("/api/groups/{company_id}/{group_id}", put(groups::update_group).delete(groups::delete_group))
+        .route("/api/groups/{company_id}/{group_id}/files", get(groups::get_group_files))
+        .route("/api/groups/{company_id}/{group_id}/move", put(groups::move_group_to_folder))
+        .route("/api/groups/{company_id}/{group_id}/star", post(groups::toggle_group_star))
+        .route("/api/groups/{company_id}/{group_id}/lock", post(groups::lock_group))
+        .route("/api/groups/{company_id}/{group_id}/unlock", post(groups::unlock_group))
+        .route("/api/files/{company_id}/{file_id}/group", post(groups::add_file_to_group).delete(groups::remove_file_from_group))
         .route("/api/trash/{company_id}", get(handlers::list_trash))
         .route("/api/trash/{company_id}/restore/{filename}", post(handlers::restore_file))
         .route("/api/trash/{company_id}/delete/{filename}", post(handlers::permanent_delete))
@@ -625,6 +651,26 @@ async fn main() {
         .route("/api/cron/cleanup", post(cron::cleanup_expired_files))
         .route("/api/cron/expiring-requests", post(cron::notify_expiring_requests))
         .route("/api/cron/storage-warnings", post(cron::check_storage_quotas))
+        
+        // AI Features (per-tenant, role-based)
+        .route("/api/ai/status", get(ai::get_ai_status))
+        .route("/api/ai/settings", get(ai::get_ai_settings).put(ai::update_ai_settings))
+        .route("/api/ai/test", post(ai::test_ai_connection))
+        .route("/api/ai/usage", get(ai::get_ai_usage))
+        .route("/api/ai/summarize", post(ai::summarize_file))
+        .route("/api/ai/answer", post(ai::answer_question))
+        .route("/api/ai/search", post(ai::semantic_search))
+        .route("/api/ai/providers", get(ai::get_providers))
+        
+        // Discord OAuth & DM Notifications
+        .route("/api/discord/settings", get(discord::get_discord_settings))
+        .route("/api/discord/settings/update", post(discord::update_discord_settings))
+        .route("/api/discord/status", get(discord::get_connection_status))
+        .route("/api/discord/connect", get(discord::start_oauth))
+        .route("/api/discord/callback", get(discord::oauth_callback))
+        .route("/api/discord/disconnect", post(discord::disconnect))
+        .route("/api/discord/preferences", post(discord::update_preferences))
+        .route("/api/discord/test", post(discord::test_connection))
         
         // SECURITY: Use auth_middleware_with_db to check user suspension status on every request
         .layer(axum::middleware::from_fn_with_state(

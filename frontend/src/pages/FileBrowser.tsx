@@ -3,9 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
     Folder, FileText, Image as ImageIcon, MoreVertical, Download,
     Trash2, Eye, EyeOff, Upload, Grid, List, Search, Plus, Star, Clock,
-    FolderPlus, Edit2, Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown,
+    FolderPlus, Edit2, Edit3, Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown,
     Lock, Unlock, History, FileOutput, Move, Home, Users, CheckSquare, Square, X,
-    Building2, MoreHorizontal
+    Building2, MoreHorizontal, Clipboard, Layers
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CreateFileRequestModal, FileRequestData } from '../components/CreateFileRequestModal';
@@ -19,6 +19,11 @@ import { MoveFileModal } from '../components/MoveFileModal';
 import { FileActionMenu } from '../components/FileActionMenu';
 import { FilePropertiesModal } from '../components/FilePropertiesModal';
 import { ShareFileModal } from '../components/ShareFileModal';
+import { AiSummaryModal } from '../components/AiSummaryModal';
+import { AiQuestionModal } from '../components/AiQuestionModal';
+import { CreateGroupModal } from '../components/CreateGroupModal';
+import { FileGroupStack } from '../components/FileGroupStack';
+import { FileGroupViewer } from '../components/FileGroupViewer';
 import { Avatar } from '../components/Avatar';
 import { useTenant } from '../context/TenantContext';
 import { useAuth, useAuthFetch } from '../context/AuthContext';
@@ -29,7 +34,7 @@ import { ShortcutActionId } from '../hooks/shortcutPresets';
 interface FileItem {
     id: string;
     name: string;
-    type: 'folder' | 'image' | 'document' | 'video' | 'audio';
+    type: 'folder' | 'image' | 'document' | 'video' | 'audio' | 'group';
     size?: string;
     size_bytes?: number;
     modified: string;
@@ -48,6 +53,34 @@ interface FileItem {
     content_type?: string;
     storage_path?: string;
     is_company_folder?: boolean;
+    group_id?: string;
+    // Group-specific fields
+    color?: string;
+    file_count?: number;
+    total_size?: number; // Total size in bytes for groups
+    parent_path?: string; // For files inside groups
+}
+
+interface FileGroup {
+    id: string;
+    tenant_id: string;
+    department_id?: string;
+    name: string;
+    description?: string;
+    color?: string;
+    icon?: string;
+    created_by: string;
+    created_at: string;
+    updated_at: string;
+    file_count: number;
+    total_size: number; // Total size in bytes
+    owner_name?: string;
+    parent_path?: string; // Folder path where this group lives (null/empty = root)
+    // Locking fields
+    is_locked?: boolean;
+    locked_by?: string;
+    locked_at?: string;
+    lock_requires_role?: string;
 }
 
 interface UserPrefs {
@@ -62,6 +95,7 @@ export function FileBrowser() {
     const [starredFiles, setStarredFiles] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    const [activeGroupMenu, setActiveGroupMenu] = useState<string | null>(null);
     const [showMoreStarred, setShowMoreStarred] = useState(false);
     const [previewFile, setPreviewFile] = useState<{ name: string, url: string, type: any } | null>(null);
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -81,6 +115,17 @@ export function FileBrowser() {
     // Department filtering for admins
     const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
     const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+
+    // File Groups
+    const [groups, setGroups] = useState<FileGroup[]>([]);
+    const [currentGroup, setCurrentGroup] = useState<FileGroup | null>(null); // When viewing inside a group
+    const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+    const [pendingGroupFile, setPendingGroupFile] = useState<FileItem | null>(null); // File to add after group creation
+    const [isGroupViewerOpen, setIsGroupViewerOpen] = useState(false);
+    const [isGroupViewerMinimized, setIsGroupViewerMinimized] = useState(false);
+    const [viewingGroup, setViewingGroup] = useState<FileGroup | null>(null);
+    const [groupFiles, setGroupFiles] = useState<any[]>([]); // Files in the currently viewed group
+    const [isLoadingGroupFiles, setIsLoadingGroupFiles] = useState(false);
 
     // Modals
     const [isRenameOpen, setIsRenameOpen] = useState(false);
@@ -108,6 +153,12 @@ export function FileBrowser() {
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [shareFile, setShareFile] = useState<FileItem | null>(null);
     
+    // AI modals
+    const [isAiSummaryModalOpen, setIsAiSummaryModalOpen] = useState(false);
+    const [isAiQuestionModalOpen, setIsAiQuestionModalOpen] = useState(false);
+    const [aiFile, setAiFile] = useState<FileItem | null>(null);
+    const [aiStatus, setAiStatus] = useState<{ enabled: boolean; hasAccess: boolean }>({ enabled: false, hasAccess: false });
+    
     // Drop target state for move
     const [dropTargetId, setDropTargetId] = useState<string | null>(null);
     
@@ -116,6 +167,10 @@ export function FileBrowser() {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [isBulkMoveModalOpen, setIsBulkMoveModalOpen] = useState(false);
     const [isBulkMoving, setIsBulkMoving] = useState(false);
+
+    // Clipboard state for copy/paste
+    const [clipboardFile, setClipboardFile] = useState<FileItem | null>(null);
+    const [isPasting, setIsPasting] = useState(false);
 
     // Keyboard navigation state
     const [focusedFileIndex, setFocusedFileIndex] = useState<number>(-1);
@@ -170,8 +225,18 @@ export function FileBrowser() {
                 .catch(() => setDepartments([]));
         }
     }, [companyId, user?.role]);
+    
+    // Fetch AI status for the tenant
+    useEffect(() => {
+        if (companyId) {
+            authFetch('/api/ai/status')
+                .then(res => res.ok ? res.json() : { enabled: false, has_access: false })
+                .then(data => setAiStatus({ enabled: data.enabled, hasAccess: data.has_access }))
+                .catch(() => setAiStatus({ enabled: false, hasAccess: false }));
+        }
+    }, [companyId]);
 
-    // Fetch files on mount, path change, view mode change, or department filter change
+    // Fetch files on mount, path change, view mode change, department filter change, or group change
     useEffect(() => {
         if (companyId) {
             fetchFiles();
@@ -179,12 +244,13 @@ export function FileBrowser() {
         // Clear selection when path or view mode changes
         setSelectedFiles(new Set());
         setIsSelectionMode(false);
-    }, [companyId, currentPath, fileViewMode, selectedDepartment]);
+    }, [companyId, currentPath, fileViewMode, selectedDepartment, currentGroup]);
 
     // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             setActiveMenu(null);
+            setActiveGroupMenu(null);
             if (viewModeRef.current && !viewModeRef.current.contains(event.target as Node)) {
                 setIsViewModeOpen(false);
             }
@@ -224,16 +290,15 @@ export function FileBrowser() {
     };
 
     // Bulk move handler
-    const handleBulkMove = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string = 'department') => {
-        if (selectedFiles.size === 0 || !companyId) return;
+    const handleBulkMove = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string = 'department', _newName?: string) => {
+        if (selectedFiles.size === 0 || !companyId) return { success: false, error: 'No files selected' };
         
         // Get only files user has permission to move
         const filesToMove = getSelectedFilesForAction('move');
         
         if (filesToMove.length === 0) {
-            alert('Cannot move any of the selected files. Locked files cannot be moved.');
             setIsBulkMoveModalOpen(false);
-            return;
+            return { success: false, error: 'Cannot move any of the selected files. Locked files cannot be moved.' };
         }
         
         setIsBulkMoving(true);
@@ -241,6 +306,7 @@ export function FileBrowser() {
         try {
             let successCount = 0;
             let errorCount = 0;
+            let duplicateCount = 0;
             
             for (const file of filesToMove) {
                 try {
@@ -256,6 +322,8 @@ export function FileBrowser() {
                     const result = await response.json();
                     if (response.ok && !result.error) {
                         successCount++;
+                    } else if (result.duplicate) {
+                        duplicateCount++;
                     } else {
                         errorCount++;
                     }
@@ -265,16 +333,20 @@ export function FileBrowser() {
             }
             
             const skippedCount = selectedFiles.size - filesToMove.length;
-            if (errorCount > 0 || skippedCount > 0) {
+            if (errorCount > 0 || skippedCount > 0 || duplicateCount > 0) {
                 let message = `Moved ${successCount} file(s).`;
+                if (duplicateCount > 0) message += ` ${duplicateCount} skipped (duplicate names).`;
                 if (errorCount > 0) message += ` ${errorCount} failed.`;
                 if (skippedCount > 0) message += ` ${skippedCount} skipped (locked).`;
-                alert(message);
+                return { success: successCount > 0, error: message };
             }
             
             fetchFiles();
             clearSelection();
             setIsBulkMoveModalOpen(false);
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: 'Failed to move files' };
         } finally {
             setIsBulkMoving(false);
         }
@@ -332,6 +404,25 @@ export function FileBrowser() {
             return;
         }
         try {
+            // If viewing inside a group, fetch files from group endpoint
+            if (currentGroup) {
+                const groupFilesRes = await authFetch(`/api/groups/${companyId}/${currentGroup.id}/files`);
+                if (groupFilesRes.ok) {
+                    const data = await groupFilesRes.json();
+                    const groupFiles = (data.files || []).map((f: any) => {
+                        const extension = f.name.split('.').pop()?.toLowerCase();
+                        let type = 'document';
+                        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension)) type = 'image';
+                        else if (['mp4', 'webm', 'mov'].includes(extension)) type = 'video';
+                        else if (['mp3', 'wav', 'ogg'].includes(extension)) type = 'audio';
+                        return { ...f, type, owner: f.owner || 'Unknown' };
+                    });
+                    setFiles(groupFiles);
+                }
+                setIsLoading(false);
+                return;
+            }
+
             // Construct path from currentPath array (skip "Home")
             const path = currentPath.slice(1).join('/');
 
@@ -341,13 +432,13 @@ export function FileBrowser() {
             if (filesRes.ok) {
                 const filesData = await filesRes.json();
 
-                // Fetch prefs (starred)
-                const prefsRes = await authFetch(`/api/prefs/${companyId}`);
-                let prefsData: { starred: string[] } = { starred: [] };
-                if (prefsRes.ok) {
-                    prefsData = await prefsRes.json();
+                // Fetch user's starred files (per-user, access-controlled)
+                const starredRes = await authFetch(`/api/files/${companyId}/starred`);
+                let starredData: { starred: string[] } = { starred: [] };
+                if (starredRes.ok) {
+                    starredData = await starredRes.json();
                 }
-                setStarredFiles(prefsData.starred || []);
+                setStarredFiles(starredData.starred || []);
 
                 // Merge starred status and map types
                 const mergedFiles = filesData.map((f: any) => {
@@ -366,11 +457,48 @@ export function FileBrowser() {
                     return {
                         ...f,
                         type,
-                        is_starred: (prefsData.starred || []).includes(f.id)
+                        is_starred: (starredData.starred || []).includes(f.id)
                     };
                 });
 
-                setFiles(mergedFiles);
+                // Fetch groups at the current path level
+                if (fileViewMode === 'department') {
+                    // Build query params for groups - filter by current path
+                    const groupParams = new URLSearchParams();
+                    if (selectedDepartment) groupParams.set('department_id', selectedDepartment);
+                    groupParams.set('parent_path', path); // Empty string = root
+                    
+                    const groupsRes = await authFetch(`/api/groups/${companyId}?${groupParams.toString()}`);
+                    if (groupsRes.ok) {
+                        const groupsData: FileGroup[] = await groupsRes.json();
+                        setGroups(groupsData);
+                        
+                        // Convert groups to FileItem format and prepend to files
+                        // Groups can also be starred (use same starred array)
+                        const groupItems: FileItem[] = groupsData.map(g => ({
+                            id: g.id,
+                            name: g.name,
+                            type: 'group' as const,
+                            modified: g.updated_at,
+                            created_at: g.created_at,
+                            owner: g.owner_name || 'Unknown',
+                            owner_id: g.created_by,
+                            color: g.color,
+                            file_count: g.file_count,
+                            total_size: g.total_size,
+                            is_starred: starredData.starred.includes(g.id),
+                            // Locking fields
+                            is_locked: g.is_locked,
+                            locked_by: g.locked_by,
+                            lock_requires_role: g.lock_requires_role,
+                        }));
+                        setFiles([...groupItems, ...mergedFiles]);
+                    } else {
+                        setFiles(mergedFiles);
+                    }
+                } else {
+                    setFiles(mergedFiles);
+                }
             }
         } catch (error) {
             console.error('Error fetching files:', error);
@@ -397,6 +525,408 @@ export function FileBrowser() {
         } catch (error) {
             console.error('Error creating folder:', error);
         }
+    };
+
+    // File Groups
+    const handleCreateGroup = async (name: string, description: string, color: string): Promise<string | void> => {
+        const response = await authFetch(`/api/groups/${companyId}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                name,
+                description: description || null,
+                color,
+                department_id: selectedDepartment || null,
+            }),
+        });
+
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            if (response.status === 409) {
+                throw new Error('A group with this name already exists');
+            }
+            throw new Error(data.message || 'Failed to create group');
+        }
+
+        const created = await response.json();
+        const groupId = created.id;
+
+        // If there's a pending file to add to the new group, add it now
+        if (pendingGroupFile && groupId) {
+            await handleAddToGroup(pendingGroupFile, groupId);
+            setPendingGroupFile(null);
+        }
+
+        fetchFiles();
+        return groupId;
+    };
+    
+    // Handler for "Create Group..." context menu option
+    const handleCreateGroupFromFile = (file: FileItem) => {
+        setPendingGroupFile(file);
+        setIsCreateGroupOpen(true);
+    };
+
+    const handleGroupClick = async (group: FileItem) => {
+        // SECURITY: Check if user can access locked group
+        if (!canAccessLockedGroup(group)) {
+            alert(`Group is locked - access denied${group.lock_requires_role ? ` (requires ${group.lock_requires_role} or higher)` : ''}`);
+            return;
+        }
+
+        // Find the full group object or construct a minimal one
+        const fullGroup = groups.find(g => g.id === group.id) || {
+            id: group.id,
+            tenant_id: '',
+            name: group.name,
+            color: group.color,
+            file_count: group.file_count || 0,
+            total_size: group.total_size || 0,
+            created_by: '',
+            created_at: group.created_at || '',
+            updated_at: group.modified || '',
+        };
+        
+        setViewingGroup(fullGroup);
+        setIsGroupViewerOpen(true);
+        setGroupFiles([]); // Clear previous files
+        setIsLoadingGroupFiles(true);
+        
+        // Fetch files in this group
+        try {
+            const res = await authFetch(`/api/groups/${companyId}/${group.id}/files`);
+            if (res.ok) {
+                const data = await res.json();
+                // Check if backend returned access denied error
+                if (data.error) {
+                    alert(data.error);
+                    setIsGroupViewerOpen(false);
+                    setViewingGroup(null);
+                    setIsLoadingGroupFiles(false);
+                    return;
+                }
+                console.log('Group files API response:', data); // Debug logging
+                setGroupFiles(data.files || []);
+            } else {
+                console.error('Failed to fetch group files:', res.status, res.statusText);
+                setGroupFiles([]);
+            }
+        } catch (error) {
+            console.error('Error fetching group files:', error);
+            setGroupFiles([]);
+        } finally {
+            setIsLoadingGroupFiles(false);
+        }
+    };
+
+    const handleExitGroup = () => {
+        setCurrentGroup(null);
+        setCurrentPath(['Home']);
+    };
+
+    // Group action handlers
+    const handleDeleteGroup = async (group: FileItem) => {
+        if (!confirm(`Delete group "${group.name}"? Files will be unlinked but not deleted.`)) return;
+        
+        try {
+            const res = await authFetch(`/api/groups/${companyId}/${group.id}`, {
+                method: 'DELETE',
+            });
+            if (res.ok) {
+                fetchFiles();
+            } else {
+                alert('Failed to delete group');
+            }
+        } catch (error) {
+            console.error('Error deleting group:', error);
+            alert('Failed to delete group');
+        }
+        setActiveGroupMenu(null);
+    };
+
+    // Group lock/unlock handlers
+    const handleLockGroup = (group: FileItem) => {
+        setActiveGroupMenu(null);
+        // Reuse the file lock modal - set the group as the file to lock
+        setLockingFile({ ...group, type: 'group' });
+        setIsLockModalOpen(true);
+    };
+
+    const handleUnlockGroup = (group: FileItem) => {
+        setActiveGroupMenu(null);
+        // Reuse the file unlock modal - set the group as the file to unlock
+        setLockingFile({ ...group, type: 'group' });
+        setIsUnlockModalOpen(true);
+    };
+
+    const handleRenameGroup = async (group: FileItem) => {
+        const newName = prompt('Enter new group name:', group.name);
+        if (!newName || newName === group.name) return;
+        
+        try {
+            const res = await authFetch(`/api/groups/${companyId}/${group.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ name: newName }),
+            });
+            if (res.ok) {
+                fetchFiles();
+            } else {
+                alert('Failed to rename group');
+            }
+        } catch (error) {
+            console.error('Error renaming group:', error);
+            alert('Failed to rename group');
+        }
+        setActiveGroupMenu(null);
+    };
+
+    // State and handler for moving groups
+    const [groupToMove, setGroupToMove] = useState<FileItem | null>(null);
+    const [isMoveGroupModalOpen, setIsMoveGroupModalOpen] = useState(false);
+
+    const handleMoveGroup = (group: FileItem) => {
+        setGroupToMove(group);
+        setIsMoveGroupModalOpen(true);
+        setActiveGroupMenu(null);
+    };
+
+    const handleMoveGroupConfirm = async (
+        targetParentId: string | null, 
+        _targetDepartmentId: string | null, 
+        _targetVisibility: string, 
+        _newName?: string
+    ): Promise<{ success: boolean; error?: string; duplicate?: boolean; conflicting_name?: string; suggested_name?: string }> => {
+        if (!groupToMove) return { success: false, error: 'No group selected' };
+        
+        console.log('Moving group:', groupToMove.id, 'to folder:', targetParentId);
+        
+        try {
+            const response = await authFetch(`/api/groups/${companyId}/${groupToMove.id}/move`, {
+                method: 'PUT',
+                body: JSON.stringify({ 
+                    target_folder_id: targetParentId,
+                }),
+            });
+
+            const result = await response.json();
+            console.log('Move group response:', response.status, result);
+            
+            if (!response.ok || result.error) {
+                return { success: false, error: result.error || result.message || 'Failed to move group' };
+            }
+
+            fetchFiles();
+            setIsMoveGroupModalOpen(false);
+            setGroupToMove(null);
+            return { success: true };
+        } catch (error) {
+            console.error('Error moving group:', error);
+            return { success: false, error: 'Failed to move group' };
+        }
+    };
+
+    // Handle drag start for groups (includes group info for special handling on drop)
+    const handleGroupDragStart = (e: React.DragEvent, group: FileItem) => {
+        e.stopPropagation();
+        const groupWithType = { ...group, type: 'group' as const };
+        setDraggedFile(groupWithType);
+        e.dataTransfer.setData('application/json', JSON.stringify({ ...group, isGroup: true }));
+        e.dataTransfer.effectAllowed = 'move';
+        console.log('Group drag started:', group.name, group.id);
+    };
+
+    const handleRemoveFromGroup = async (file: FileItem) => {
+        try {
+            const response = await authFetch(`/api/files/${companyId}/${file.id}/group`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                fetchFiles();
+            }
+        } catch (error) {
+            console.error('Error removing file from group:', error);
+        }
+        setActiveMenu(null);
+    };
+
+    // Handlers for FileGroupViewer
+    const handleGroupViewerRemove = async (file: any) => {
+        try {
+            const response = await authFetch(`/api/files/${companyId}/${file.id}/group`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                // Remove from local state
+                setGroupFiles(prev => prev.filter(f => f.id !== file.id));
+                fetchFiles(); // Refresh main file list
+            }
+        } catch (error) {
+            console.error('Error removing file from group:', error);
+        }
+    };
+
+    const handleGroupViewerPreview = (file: any) => {
+        // Minimize group viewer and set up preview
+        setIsGroupViewerMinimized(true);
+        
+        // Convert MIME type to category type expected by FilePreviewModal
+        let fileType: 'image' | 'document' | 'video' | 'audio' | 'folder' = 'document';
+        const contentType = file.content_type || '';
+        if (contentType.startsWith('image/')) fileType = 'image';
+        else if (contentType.startsWith('video/')) fileType = 'video';
+        else if (contentType.startsWith('audio/')) fileType = 'audio';
+        
+        setPreviewFile({
+            name: file.name,
+            url: `/api/download/${companyId}/${file.id}`,
+            type: fileType,
+        });
+    };
+
+    // Handler for when preview closes - expand group viewer if it was minimized
+    const handlePreviewClose = () => {
+        setPreviewFile(null);
+        restoreGroupViewerIfMinimized();
+    };
+
+    // Helper to restore group viewer when any modal closes
+    const restoreGroupViewerIfMinimized = () => {
+        if (isGroupViewerOpen && isGroupViewerMinimized) {
+            setIsGroupViewerMinimized(false);
+        }
+    };
+
+    // Star is intentionally removed from group viewer - star the group instead
+
+    const handleGroupViewerCopy = (file: any) => {
+        // Convert to FileItem and set clipboard
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            modified: file.created_at || '',
+            owner: '',
+            content_type: file.content_type,
+            storage_path: file.storage_path,
+        };
+        setClipboardFile(fileItem);
+    };
+
+    const handleGroupViewerShare = (file: any) => {
+        // Minimize group viewer and open share modal
+        setIsGroupViewerMinimized(true);
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            modified: file.created_at || '',
+            owner: '',
+        };
+        setShareFile(fileItem);
+        setIsShareModalOpen(true);
+    };
+
+    const handleGroupViewerProperties = (file: any) => {
+        // Minimize group viewer and open properties modal
+        setIsGroupViewerMinimized(true);
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            size_bytes: file.size_bytes,
+            modified: file.created_at || '',
+            created_at: file.created_at,
+            owner: '',
+            content_type: file.content_type,
+        };
+        setPropertiesFile(fileItem);
+        setIsPropertiesModalOpen(true);
+    };
+
+    const handleGroupViewerAiSummarize = (file: any) => {
+        // Minimize group viewer and open AI summary modal
+        setIsGroupViewerMinimized(true);
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            modified: file.created_at || '',
+            owner: '',
+        };
+        setAiFile(fileItem);
+        setIsAiSummaryModalOpen(true);
+    };
+
+    const handleGroupViewerAiQuestion = (file: any) => {
+        // Minimize group viewer and open AI question modal
+        setIsGroupViewerMinimized(true);
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            modified: file.created_at || '',
+            owner: '',
+        };
+        setAiFile(fileItem);
+        setIsAiQuestionModalOpen(true);
+    };
+
+    const handleGroupViewerDownload = async (file: any) => {
+        try {
+            const response = await authFetch(`/api/download/${companyId}/${file.id}`);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        } catch (error) {
+            console.error('Error downloading file:', error);
+        }
+    };
+
+    const handleGroupViewerMoveToFolder = (file: any) => {
+        console.log('handleGroupViewerMoveToFolder called with file:', file);
+        // Minimize group viewer and open move modal
+        setIsGroupViewerMinimized(true);
+        const fileItem: FileItem = {
+            id: file.id,
+            name: file.name,
+            type: 'document',
+            size: file.size_bytes ? `${(file.size_bytes / 1024).toFixed(1)} KB` : '--',
+            modified: file.created_at || '',
+            owner: '',
+            visibility: file.visibility || 'department',
+            parent_path: file.parent_path || '',
+        };
+        console.log('Setting movingFile to:', fileItem);
+        console.log('Opening move modal, current state - isMoveModalOpen:', isMoveModalOpen);
+        setMovingFile(fileItem);
+        setIsMoveModalOpen(true);
+    };
+
+    const handleAddToGroup = async (file: FileItem, groupId: string) => {
+        try {
+            const response = await authFetch(`/api/files/${companyId}/${file.id}/group`, {
+                method: 'POST',
+                body: JSON.stringify({ group_id: groupId }),
+            });
+            if (response.ok) {
+                fetchFiles();
+            }
+        } catch (error) {
+            console.error('Error adding file to group:', error);
+        }
+        setActiveMenu(null);
     };
 
     const handleCreateFileRequest = async (data: FileRequestData) => {
@@ -475,22 +1005,33 @@ export function FileBrowser() {
     };
 
     const toggleStar = async (file: FileItem) => {
-        const newStarred = starredFiles.includes(file.id)
+        // Optimistic update
+        const wasStarred = starredFiles.includes(file.id);
+        const newStarred = wasStarred
             ? starredFiles.filter(id => id !== file.id)
             : [...starredFiles, file.id];
 
         setStarredFiles(newStarred);
-
-        // Optimistic update
         setFiles(files.map(f => f.id === file.id ? { ...f, is_starred: !f.is_starred } : f));
 
         try {
-            await authFetch(`/api/prefs/${companyId}`, {
+            // Groups use a different endpoint since they're not in files_metadata
+            const endpoint = file.type === 'group' 
+                ? `/api/groups/${companyId}/${file.id}/star`
+                : `/api/files/${companyId}/${file.id}/star`;
+            
+            const response = await authFetch(endpoint, {
                 method: 'POST',
-                body: JSON.stringify({ starred: newStarred, settings: {} }),
             });
+            
+            if (!response.ok) {
+                // Revert optimistic update on failure
+                setStarredFiles(wasStarred ? [...starredFiles] : starredFiles.filter(id => id !== file.id));
+                setFiles(files.map(f => f.id === file.id ? { ...f, is_starred: wasStarred } : f));
+                console.error('Failed to toggle star - access denied');
+            }
         } catch (error) {
-            console.error('Error updating prefs:', error);
+            console.error('Error updating star:', error);
             fetchFiles(); // Revert on error
         }
     };
@@ -500,8 +1041,47 @@ export function FileBrowser() {
         if (!file.is_locked) return true;
         const isOwner = user?.id === file.owner_id;
         const isLocker = user?.id === file.locked_by;
-        const isAdmin = user?.role === 'SuperAdmin' || user?.role === 'Admin' || user?.role === 'Manager';
-        return isLocker || isOwner || isAdmin;
+        
+        // Role hierarchy check - must meet or exceed the required role level
+        const roleLevel = (role: string) => {
+            switch (role) {
+                case 'SuperAdmin': return 100;
+                case 'Admin': return 80;
+                case 'Manager': return 60;
+                case 'Employee': return 40;
+                default: return 20;
+            }
+        };
+        
+        const userLevel = roleLevel(user?.role || '');
+        const requiredLevel = file.lock_requires_role ? roleLevel(file.lock_requires_role) : 100;
+        const hasRequiredRole = userLevel >= requiredLevel;
+        
+        return isLocker || isOwner || hasRequiredRole;
+    };
+
+    // Check if user can access a locked group
+    const canAccessLockedGroup = (group: FileItem) => {
+        if (!group.is_locked) return true;
+        const isOwner = user?.id === group.owner_id;
+        const isLocker = user?.id === group.locked_by;
+        
+        // Role hierarchy check - must meet or exceed the required role level
+        const roleLevel = (role: string) => {
+            switch (role) {
+                case 'SuperAdmin': return 100;
+                case 'Admin': return 80;
+                case 'Manager': return 60;
+                case 'Employee': return 40;
+                default: return 20;
+            }
+        };
+        
+        const userLevel = roleLevel(user?.role || '');
+        const requiredLevel = group.lock_requires_role ? roleLevel(group.lock_requires_role) : 100;
+        const hasRequiredRole = userLevel >= requiredLevel;
+        
+        return isLocker || isOwner || hasRequiredRole;
     };
 
     const handlePreview = (file: FileItem) => {
@@ -521,6 +1101,19 @@ export function FileBrowser() {
     const handleShare = (file: FileItem) => {
         setShareFile(file);
         setIsShareModalOpen(true);
+        setActiveMenu(null);
+    };
+    
+    // AI handlers
+    const handleAiSummarize = (file: FileItem) => {
+        setAiFile(file);
+        setIsAiSummaryModalOpen(true);
+        setActiveMenu(null);
+    };
+    
+    const handleAiQuestion = (file: FileItem) => {
+        setAiFile(file);
+        setIsAiQuestionModalOpen(true);
         setActiveMenu(null);
     };
 
@@ -572,7 +1165,12 @@ export function FileBrowser() {
         if (!lockingFile || !companyId) return;
         setIsLocking(true);
         try {
-            const response = await authFetch(`/api/files/${companyId}/${lockingFile.id}/lock`, {
+            // Use group API for groups, file API for files
+            const apiPath = lockingFile.type === 'group'
+                ? `/api/groups/${companyId}/${lockingFile.id}/lock`
+                : `/api/files/${companyId}/${lockingFile.id}/lock`;
+
+            const response = await authFetch(apiPath, {
                 method: 'POST',
                 body: JSON.stringify({
                     password: password,
@@ -586,7 +1184,7 @@ export function FileBrowser() {
                 setLockingFile(null);
             } else {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to lock file');
+                throw new Error(error.error || `Failed to lock ${lockingFile.type === 'group' ? 'group' : 'file'}`);
             }
         } finally {
             setIsLocking(false);
@@ -597,7 +1195,12 @@ export function FileBrowser() {
         if (!lockingFile || !companyId) return { error: 'No file selected' };
         setIsLocking(true);
         try {
-            const response = await authFetch(`/api/files/${companyId}/${lockingFile.id}/unlock`, {
+            // Use group API for groups, file API for files
+            const apiPath = lockingFile.type === 'group'
+                ? `/api/groups/${companyId}/${lockingFile.id}/unlock`
+                : `/api/files/${companyId}/${lockingFile.id}/unlock`;
+
+            const response = await authFetch(apiPath, {
                 method: 'POST',
                 body: JSON.stringify({ password })
             });
@@ -611,7 +1214,7 @@ export function FileBrowser() {
                 return {};
             } else {
                 return { 
-                    error: result.error || 'Failed to unlock file',
+                    error: result.error || `Failed to unlock ${lockingFile.type === 'group' ? 'group' : 'file'}`,
                     requires_password: result.requires_password
                 };
             }
@@ -620,8 +1223,8 @@ export function FileBrowser() {
         }
     };
 
-    const handleMoveFile = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string = 'department') => {
-        if (!movingFile || !companyId) return;
+    const handleMoveFile = async (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string = 'department', newName?: string) => {
+        if (!movingFile || !companyId) return { success: false, error: 'No file selected' };
         setIsMoving(true);
         try {
             const response = await authFetch(`/api/files/${companyId}/${movingFile.id}/move`, {
@@ -629,19 +1232,44 @@ export function FileBrowser() {
                 body: JSON.stringify({
                     target_parent_id: targetParentId,
                     target_department_id: targetDepartmentId,
-                    target_visibility: targetVisibility
+                    target_visibility: targetVisibility,
+                    new_name: newName || null
                 })
             });
 
             const result = await response.json();
             
             if (!response.ok || result.error) {
-                throw new Error(result.error || result.message || 'Failed to move file');
+                // Return structured result for duplicate handling
+                return {
+                    success: false,
+                    error: result.error || 'Failed to move file',
+                    duplicate: result.duplicate || false,
+                    conflicting_name: result.conflicting_name,
+                    suggested_name: result.suggested_name
+                };
             }
             
             fetchFiles();
             setIsMoveModalOpen(false);
             setMovingFile(null);
+            
+            // If group viewer is open, refresh group files
+            if (isGroupViewerOpen && viewingGroup) {
+                try {
+                    const res = await authFetch(`/api/groups/${companyId}/${viewingGroup.id}/files`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setGroupFiles(data.files || []);
+                    }
+                } catch (e) {
+                    console.error('Error refreshing group files:', e);
+                }
+            }
+            
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: 'Failed to move file' };
         } finally {
             setIsMoving(false);
         }
@@ -691,27 +1319,49 @@ export function FileBrowser() {
             return;
         }
 
-        try {
-            const response = await authFetch(`/api/files/${companyId}/${draggedFile.id}/move`, {
-                method: 'PUT',
-                body: JSON.stringify({
-                    target_parent_id: targetParentId,
-                    target_department_id: null
-                })
-            });
+        const draggedFileBackup = draggedFile;
+        setDraggedFile(null);
 
-            const result = await response.json();
-            
-            if (!response.ok || result.error) {
-                alert(result.error || result.message || 'Failed to move file');
+        try {
+            // Check if dragging a group - use group move endpoint
+            if (draggedFileBackup.type === 'group') {
+                console.log('Moving group to root:', { groupId: draggedFileBackup.id });
+                const response = await authFetch(`/api/groups/${companyId}/${draggedFileBackup.id}/move`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ 
+                        target_path: '', // Empty string = move to root
+                    }),
+                });
+
+                const result = await response.json();
+                console.log('Group move to root response:', response.status, result);
+                
+                if (!response.ok || result.error) {
+                    alert(result.error || result.message || 'Failed to move group');
+                } else {
+                    fetchFiles();
+                }
             } else {
-                fetchFiles();
+                // Regular file move
+                const response = await authFetch(`/api/files/${companyId}/${draggedFileBackup.id}/move`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        target_parent_id: targetParentId,
+                        target_department_id: null
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok || result.error) {
+                    alert(result.error || result.message || 'Failed to move file');
+                } else {
+                    fetchFiles();
+                }
             }
         } catch (error) {
-            console.error('Error moving file:', error);
+            console.error('Error moving file/group:', error);
         }
-        
-        setDraggedFile(null);
     };
 
     const handleDragEnd = () => {
@@ -729,6 +1379,48 @@ export function FileBrowser() {
         setPropertiesFile(file);
         setIsPropertiesModalOpen(true);
         setActiveMenu(null);
+    };
+
+    // Copy file to clipboard
+    const handleCopy = (file: FileItem) => {
+        if (file.type === 'folder' || file.type === 'group') return; // Can't copy folders or groups
+        setClipboardFile(file);
+        setActiveMenu(null);
+    };
+
+    // Paste file from clipboard to current location
+    const handlePaste = async () => {
+        if (!companyId || !clipboardFile) return;
+        
+        setIsPasting(true);
+        try {
+            // Get current path (excluding "Home")
+            const currentParentPath = currentPath.length > 1 ? currentPath.slice(1).join('/') : null;
+            
+            const response = await authFetch(`/api/files/${companyId}/${clipboardFile.id}/copy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    target_parent_path: currentParentPath,
+                    target_department_id: selectedDepartment || null,
+                    target_visibility: fileViewMode,
+                }),
+            });
+            
+            if (response.ok) {
+                // Clear clipboard after successful paste
+                setClipboardFile(null);
+                // Refresh file list
+                fetchFiles();
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Failed to paste file:', errorData.error || 'Unknown error');
+            }
+        } catch (error) {
+            console.error('Error pasting file:', error);
+        } finally {
+            setIsPasting(false);
+        }
     };
 
     const handleToggleCompanyFolder = async (file: FileItem) => {
@@ -920,7 +1612,9 @@ export function FileBrowser() {
                     if (!isAnyModalOpen && focusedFileIndex >= 0 && focusedFileIndex < files.length) {
                         const file = files[focusedFileIndex];
                         if (file) {
-                            if (file.type === 'folder') {
+                            if (file.type === 'group') {
+                                handleGroupClick(file);
+                            } else if (file.type === 'folder') {
                                 setCurrentPath([...currentPath, file.name]);
                             } else {
                                 handlePreview(file);
@@ -1112,8 +1806,9 @@ export function FileBrowser() {
         setFocusedFileIndex(-1);
     }, [files.length, currentPath]);
 
-    const getIcon = (type: FileItem['type']) => {
-        switch (type) {
+    const getIcon = (file: FileItem) => {
+        switch (file.type) {
+            case 'group': return <Layers className="w-16 h-16" style={{ color: file.color || '#3B82F6' }} />;
             case 'folder': return <Folder className="w-16 h-16 text-blue-500" />;
             case 'image': return <ImageIcon className="w-16 h-16 text-purple-500" />;
             case 'video': return <ImageIcon className="w-16 h-16 text-red-500" />;
@@ -1123,8 +1818,9 @@ export function FileBrowser() {
     };
 
     // Smaller icons for Quick Access section
-    const getSmallIcon = (type: FileItem['type']) => {
-        switch (type) {
+    const getSmallIcon = (file: FileItem) => {
+        switch (file.type) {
+            case 'group': return <Layers className="w-8 h-8" style={{ color: file.color || '#3B82F6' }} />;
             case 'folder': return <Folder className="w-8 h-8 text-blue-500" />;
             case 'image': return <ImageIcon className="w-8 h-8 text-purple-500" />;
             case 'video': return <ImageIcon className="w-8 h-8 text-red-500" />;
@@ -1304,7 +2000,16 @@ export function FileBrowser() {
         e.stopPropagation();
         e.currentTarget.classList.remove('bg-primary-100', 'border-primary-500');
 
-        if (!draggedFile || draggedFile.id === folder.id || draggedFile.is_locked) return;
+        console.log('Folder drop triggered:', { 
+            draggedFile: draggedFile?.name, 
+            draggedType: draggedFile?.type,
+            targetFolder: folder.name 
+        });
+
+        if (!draggedFile || draggedFile.id === folder.id || draggedFile.is_locked) {
+            console.log('Drop rejected:', { noDraggedFile: !draggedFile, sameId: draggedFile?.id === folder.id, isLocked: draggedFile?.is_locked });
+            return;
+        }
 
         // Optimistic update
         setFiles(prev => prev.filter(f => f.id !== draggedFile.id));
@@ -1312,27 +2017,50 @@ export function FileBrowser() {
         setDraggedFile(null);
 
         try {
-            // Use the new move API endpoint with folder ID
-            const response = await authFetch(`/api/files/${companyId}/${draggedFileBackup.id}/move`, {
-                method: 'PUT',
-                body: JSON.stringify({ 
-                    target_parent_id: folder.id,
-                    target_department_id: null
-                }),
-            });
+            // Check if dragging a group - use group move endpoint
+            if (draggedFileBackup.type === 'group') {
+                console.log('Moving group to folder:', { groupId: draggedFileBackup.id, folderId: folder.id });
+                const response = await authFetch(`/api/groups/${companyId}/${draggedFileBackup.id}/move`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ 
+                        target_folder_id: folder.id,
+                    }),
+                });
 
-            const result = await response.json();
-            
-            if (!response.ok || result.error) {
-                alert(result.error || result.message || 'Failed to move file');
-                fetchFiles(); // Revert
-                return;
+                const result = await response.json();
+                console.log('Group move response:', response.status, result);
+                
+                if (!response.ok || result.error) {
+                    alert(result.error || result.message || 'Failed to move group');
+                    fetchFiles(); // Revert
+                    return;
+                }
+
+                // Refresh to ensure everything is synced
+                fetchFiles();
+            } else {
+                // Use the move API endpoint for regular files
+                const response = await authFetch(`/api/files/${companyId}/${draggedFileBackup.id}/move`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ 
+                        target_parent_id: folder.id,
+                        target_department_id: null
+                    }),
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok || result.error) {
+                    alert(result.error || result.message || 'Failed to move file');
+                    fetchFiles(); // Revert
+                    return;
+                }
+
+                // Refresh to ensure everything is synced
+                fetchFiles();
             }
-
-            // Refresh to ensure everything is synced
-            fetchFiles();
         } catch (error) {
-            console.error('Error moving file:', error);
+            console.error('Error moving file/group:', error);
             fetchFiles(); // Revert
         }
     };
@@ -1450,13 +2178,40 @@ export function FileBrowser() {
                         >
                             <LinkIcon className="w-5 h-5" />
                         </button>
-                        <button
-                            onClick={() => setIsNewFolderOpen(true)}
-                            title="New Folder"
-                            className="p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
-                        >
-                            <FolderPlus className="w-5 h-5" />
-                        </button>
+                        {!currentGroup && (
+                            <button
+                                onClick={() => setIsNewFolderOpen(true)}
+                                title="New Folder"
+                                className="p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
+                            >
+                                <FolderPlus className="w-5 h-5" />
+                            </button>
+                        )}
+                        {!currentGroup && fileViewMode === 'department' && (
+                            <button
+                                onClick={() => setIsCreateGroupOpen(true)}
+                                title="New Group"
+                                className="p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
+                            >
+                                <Layers className="w-5 h-5" />
+                            </button>
+                        )}
+                        {clipboardFile && (
+                            <button
+                                onClick={handlePaste}
+                                disabled={isPasting}
+                                title={`Paste "${clipboardFile.name}" here`}
+                                className={clsx(
+                                    "px-3 py-2 border rounded-lg shadow-sm transition-colors flex items-center gap-1.5",
+                                    isPasting
+                                        ? "bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-400 cursor-not-allowed"
+                                        : "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/40"
+                                )}
+                            >
+                                <Clipboard className="w-4 h-4" />
+                                <span className="text-sm font-medium">Paste</span>
+                            </button>
+                        )}
                     </div>
                     
                     {/* Mobile: Overflow menu */}
@@ -1498,13 +2253,35 @@ export function FileBrowser() {
                                     <LinkIcon className="w-5 h-5 mr-3" />
                                     Request Files
                                 </button>
-                                <button
-                                    onClick={() => { setIsNewFolderOpen(true); setIsMobileMenuOpen(false); }}
-                                    className="flex items-center w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                    <FolderPlus className="w-5 h-5 mr-3" />
-                                    New Folder
-                                </button>
+                                {!currentGroup && (
+                                    <button
+                                        onClick={() => { setIsNewFolderOpen(true); setIsMobileMenuOpen(false); }}
+                                        className="flex items-center w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        <FolderPlus className="w-5 h-5 mr-3" />
+                                        New Folder
+                                    </button>
+                                )}
+                                {!currentGroup && fileViewMode === 'department' && (
+                                    <button
+                                        onClick={() => { setIsCreateGroupOpen(true); setIsMobileMenuOpen(false); }}
+                                        className="flex items-center w-full px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        <Layers className="w-5 h-5 mr-3" />
+                                        New Group
+                                    </button>
+                                )}
+                                {clipboardFile && (
+                                    <button
+                                        onClick={() => { handlePaste(); setIsMobileMenuOpen(false); }}
+                                        disabled={isPasting}
+                                        className="flex items-center w-full px-4 py-3 text-sm text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20"
+                                    >
+                                        <Clipboard className="w-5 h-5 mr-3" />
+                                        Paste
+                                        <span className="ml-1 text-xs text-green-500 truncate max-w-32">({clipboardFile.name})</span>
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1623,7 +2400,9 @@ export function FileBrowser() {
                                                         className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
                                                         onClick={() => {
                                                             setShowMoreStarred(false);
-                                                            if (file.type === 'folder') {
+                                                            if (file.type === 'group') {
+                                                                handleGroupClick(file);
+                                                            } else if (file.type === 'folder') {
                                                                 setCurrentPath([...currentPath, file.name]);
                                                             } else {
                                                                 handlePreview(file);
@@ -1631,7 +2410,7 @@ export function FileBrowser() {
                                                         }}
                                                     >
                                                         <div className="p-1.5 bg-primary-50 dark:bg-primary-900/30 rounded flex-shrink-0">
-                                                            {getSmallIcon(file.type)}
+                                                            {getSmallIcon(file)}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
@@ -1652,7 +2431,9 @@ export function FileBrowser() {
                                     key={`quick-${file.id}`} 
                                     className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer flex items-center space-x-3" 
                                     onClick={() => {
-                                        if (file.type === 'folder') {
+                                        if (file.type === 'group') {
+                                            handleGroupClick(file);
+                                        } else if (file.type === 'folder') {
                                             setCurrentPath([...currentPath, file.name]);
                                         } else {
                                             handlePreview(file);
@@ -1660,7 +2441,7 @@ export function FileBrowser() {
                                     }}
                                 >
                                     <div className="p-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg flex-shrink-0">
-                                        {getSmallIcon(file.type)}
+                                        {getSmallIcon(file)}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
@@ -1683,7 +2464,7 @@ export function FileBrowser() {
             {previewFile && (
                 <FilePreviewModal
                     isOpen={!!previewFile}
-                    onClose={() => setPreviewFile(null)}
+                    onClose={handlePreviewClose}
                     file={previewFile}
                 />
             )}
@@ -1717,8 +2498,10 @@ export function FileBrowser() {
                 onClose={() => {
                     setIsPropertiesModalOpen(false);
                     setPropertiesFile(null);
+                    restoreGroupViewerIfMinimized();
                 }}
                 file={propertiesFile}
+                companyId={companyId}
             />
 
             {/* Share File Modal */}
@@ -1728,10 +2511,37 @@ export function FileBrowser() {
                     onClose={() => {
                         setIsShareModalOpen(false);
                         setShareFile(null);
+                        restoreGroupViewerIfMinimized();
                     }}
                     file={shareFile}
                     companyId={companyId}
                     complianceMode={currentCompany?.compliance_mode}
+                />
+            )}
+
+            {/* AI Summary Modal */}
+            {aiFile && (
+                <AiSummaryModal
+                    isOpen={isAiSummaryModalOpen}
+                    onClose={() => {
+                        setIsAiSummaryModalOpen(false);
+                        setAiFile(null);
+                        restoreGroupViewerIfMinimized();
+                    }}
+                    file={aiFile}
+                />
+            )}
+
+            {/* AI Question Modal */}
+            {aiFile && (
+                <AiQuestionModal
+                    isOpen={isAiQuestionModalOpen}
+                    onClose={() => {
+                        setIsAiQuestionModalOpen(false);
+                        setAiFile(null);
+                        restoreGroupViewerIfMinimized();
+                    }}
+                    file={aiFile}
                 />
             )}
 
@@ -1767,6 +2577,7 @@ export function FileBrowser() {
                 onClose={() => {
                     setIsMoveModalOpen(false);
                     setMovingFile(null);
+                    restoreGroupViewerIfMinimized();
                 }}
                 onMove={handleMoveFile}
                 fileName={movingFile?.name || ''}
@@ -1786,6 +2597,21 @@ export function FileBrowser() {
                 fileName=""
                 fileCount={selectedFiles.size}
                 isMoving={isBulkMoving}
+                currentPath={currentPath.length > 1 ? currentPath.slice(1).join('/') : null}
+                currentVisibility={fileViewMode}
+                canCrossDepartment={user?.role === 'SuperAdmin' || user?.role === 'Admin'}
+            />
+
+            {/* Move Group Modal */}
+            <MoveFileModal
+                isOpen={isMoveGroupModalOpen}
+                onClose={() => {
+                    setIsMoveGroupModalOpen(false);
+                    setGroupToMove(null);
+                }}
+                onMove={handleMoveGroupConfirm}
+                fileName={groupToMove?.name || ''}
+                isMoving={false}
                 currentPath={currentPath.length > 1 ? currentPath.slice(1).join('/') : null}
                 currentVisibility={fileViewMode}
                 canCrossDepartment={user?.role === 'SuperAdmin' || user?.role === 'Admin'}
@@ -1817,8 +2643,13 @@ export function FileBrowser() {
                                     )}
                                     onClick={() => {
                                         // Navigate to this path
-                                        const newPath = currentPath.slice(0, index + 1);
-                                        setCurrentPath(newPath);
+                                        if (index === 0 && currentGroup) {
+                                            // Exiting from a group - go back to root
+                                            handleExitGroup();
+                                        } else {
+                                            const newPath = currentPath.slice(0, index + 1);
+                                            setCurrentPath(newPath);
+                                        }
                                     }}
                                     onDragOver={(e) => {
                                         if (index === 0 && draggedFile) {
@@ -1919,6 +2750,91 @@ export function FileBrowser() {
                     {paginatedFiles.length > 0 && (viewMode === 'grid' ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 min-[1800px]:grid-cols-10 min-[2200px]:grid-cols-12 min-[2800px]:grid-cols-14 min-[3200px]:grid-cols-16 gap-4 justify-items-center content-start">
                             {paginatedFiles.map((file, index) => (
+                                file.type === 'group' ? (
+                                    // Render FileGroupStack for group items
+                                    <div key={file.id} className="w-full max-w-[180px] relative">
+                                        <FileGroupStack
+                                            id={file.id}
+                                            name={file.name}
+                                            color={file.color}
+                                            fileCount={file.file_count || 0}
+                                            totalSize={file.total_size}
+                                            owner={file.owner}
+                                            onClick={() => handleGroupClick(file)}
+                                            onMenuClick={() => setActiveGroupMenu(activeGroupMenu === file.id ? null : file.id)}
+                                            isSelected={selectedFiles.has(file.id)}
+                                            isDraggable={!isSelectionMode}
+                                            onDragStart={(e) => handleGroupDragStart(e, file)}
+                                            isLocked={file.is_locked}
+                                            lockRequiresRole={file.lock_requires_role}
+                                        />
+                                        {/* Group context menu */}
+                                        {activeGroupMenu === file.id && (
+                                            <div className="absolute top-12 right-2 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[160px]">
+                                                {/* If locked and user can't access, show access denied message */}
+                                                {file.is_locked && !canAccessLockedGroup(file) ? (
+                                                    <>
+                                                        {/* Show locked/access denied message */}
+                                                        <div className="px-4 py-3 text-sm text-red-500 flex items-center">
+                                                            <Lock className="w-4 h-4 mr-2" />
+                                                            <span>Access denied{file.lock_requires_role ? ` - requires ${file.lock_requires_role}` : ''}</span>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                            onClick={(e) => { e.stopPropagation(); handleGroupClick(file); setActiveGroupMenu(null); }}
+                                                        >
+                                                            <Layers className="w-4 h-4 mr-2 text-gray-400" /> Open Group
+                                                        </button>
+                                                        <button
+                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                            onClick={(e) => { e.stopPropagation(); toggleStar(file); setActiveGroupMenu(null); }}
+                                                        >
+                                                            <Star className={clsx("w-4 h-4 mr-2", file.is_starred ? "text-yellow-400 fill-yellow-400" : "text-gray-400")} />
+                                                            {file.is_starred ? 'Unstar' : 'Star'}
+                                                        </button>
+                                                        <button
+                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                            onClick={(e) => { e.stopPropagation(); handleRenameGroup(file); }}
+                                                        >
+                                                            <Edit3 className="w-4 h-4 mr-2 text-gray-400" /> Rename
+                                                        </button>
+                                                        <button
+                                                            className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                            onClick={(e) => { e.stopPropagation(); handleMoveGroup(file); }}
+                                                        >
+                                                            <Move className="w-4 h-4 mr-2 text-gray-400" /> Move Group
+                                                        </button>
+                                                        {/* Lock/Unlock Group */}
+                                                        {file.is_locked ? (
+                                                            <button
+                                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                                onClick={(e) => { e.stopPropagation(); handleUnlockGroup(file); }}
+                                                            >
+                                                                <Unlock className="w-4 h-4 mr-2 text-gray-400" /> Unlock Group
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                                onClick={(e) => { e.stopPropagation(); handleLockGroup(file); }}
+                                                            >
+                                                                <Lock className="w-4 h-4 mr-2 text-gray-400" /> Lock Group
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center"
+                                                            onClick={(e) => { e.stopPropagation(); handleDeleteGroup(file); }}
+                                                        >
+                                                            <Trash2 className="w-4 h-4 mr-2" /> Delete Group
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
                                 <div
                                     key={file.id}
                                     className={clsx(
@@ -1930,7 +2846,15 @@ export function FileBrowser() {
                                                 : "border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-500"
                                     )}
                                     draggable={!isSelectionMode}
-                                    onDragStart={(e) => !isSelectionMode && handleFileDragStart(e, file)}
+                                    onDragStart={(e) => {
+                                        if (isSelectionMode) return;
+                                        // Use correct handler for groups vs files
+                                        if (file.type === 'group') {
+                                            handleGroupDragStart(e, file);
+                                        } else {
+                                            handleFileDragStart(e, file);
+                                        }
+                                    }}
                                     onDragOver={(e) => file.type === 'folder' && handleFolderDragOver(e, file)}
                                     onDragLeave={handleFolderDragLeave}
                                     onDrop={(e) => file.type === 'folder' && handleFolderDrop(e, file)}
@@ -1955,17 +2879,20 @@ export function FileBrowser() {
                                         </div>
                                     )}
                                     <div
-                                        className="flex-1 flex items-center justify-center w-full mb-3"
+                                        className="flex-1 flex items-center justify-center w-full mb-3 cursor-pointer"
                                         onClick={(e) => {
+                                            e.stopPropagation();
                                             if (isSelectionMode) return;
-                                            if (file.type === 'folder') {
+                                            if (file.type === 'group') {
+                                                handleGroupClick(file);
+                                            } else if (file.type === 'folder') {
                                                 setCurrentPath([...currentPath, file.name]);
                                             } else {
                                                 handlePreview(file);
                                             }
                                         }}
                                     >
-                                        {getIcon(file.type)}
+                                        {getIcon(file)}
                                     </div>
                                     <div className="w-full">
                                         <p className="text-sm font-medium text-gray-900 dark:text-white truncate w-full" title={file.name}>{file.name}</p>
@@ -2017,6 +2944,9 @@ export function FileBrowser() {
                                                 canDelete={canDeleteFile(file)}
                                                 canShare={canShareFile(file)}
                                                 currentUserId={user?.id}
+                                                currentUserRole={user?.role}
+                                                canUseAi={aiStatus.hasAccess}
+                                                aiEnabled={aiStatus.enabled}
                                                 onPreview={handlePreview}
                                                 onShare={handleShare}
                                                 onDownload={handleDownload}
@@ -2025,14 +2955,23 @@ export function FileBrowser() {
                                                 onLock={handleLockToggle}
                                                 onActivity={handleViewActivity}
                                                 onMove={openMoveModal}
+                                                onCopy={handleCopy}
                                                 onDelete={handleDelete}
                                                 onProperties={handleViewProperties}
                                                 onToggleCompanyFolder={handleToggleCompanyFolder}
+                                                onAiSummarize={handleAiSummarize}
+                                                onAiQuestion={handleAiQuestion}
+                                                groups={groups}
+                                                isInsideGroup={!!currentGroup}
+                                                onAddToGroup={handleAddToGroup}
+                                                onRemoveFromGroup={handleRemoveFromGroup}
+                                                onCreateGroupFromFile={handleCreateGroupFromFile}
                                                 buttonRef={{ current: menuButtonRefs.current.get(`grid-${file.id}`) || null }}
                                             />
                                         )}
                                     </div>
                                 </div>
+                                )
                             ))}
                         </div>
                     ) : (
@@ -2104,7 +3043,15 @@ export function FileBrowser() {
                                                         : "hover:bg-gray-50 dark:hover:bg-gray-700/50"
                                             )}
                                             draggable={!isSelectionMode}
-                                            onDragStart={(e) => !isSelectionMode && handleFileDragStart(e, file)}
+                                            onDragStart={(e) => {
+                                                if (isSelectionMode) return;
+                                                // Use correct handler for groups vs files
+                                                if (file.type === 'group') {
+                                                    handleGroupDragStart(e, file);
+                                                } else {
+                                                    handleFileDragStart(e, file);
+                                                }
+                                            }}
                                             onDragOver={(e) => file.type === 'folder' && handleFolderDragOver(e, file)}
                                             onDragLeave={handleFolderDragLeave}
                                             onDrop={(e) => file.type === 'folder' && handleFolderDrop(e, file)}
@@ -2128,9 +3075,12 @@ export function FileBrowser() {
                                                     </button>
                                                 </td>
                                             )}
-                                            <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => {
+                                            <td className="px-6 py-4 whitespace-nowrap cursor-pointer" onClick={(e) => {
+                                                e.stopPropagation();
                                                 if (isSelectionMode) return;
-                                                if (file.type === 'folder') {
+                                                if (file.type === 'group') {
+                                                    handleGroupClick(file);
+                                                } else if (file.type === 'folder') {
                                                     setCurrentPath([...currentPath, file.name]);
                                                 } else {
                                                     handlePreview(file);
@@ -2138,7 +3088,7 @@ export function FileBrowser() {
                                             }}>
                                                 <div className="flex items-center">
                                                     <div className="flex-shrink-0 h-8 w-8 flex items-center justify-center">
-                                                        {getIcon(file.type)}
+                                                        {getIcon(file)}
                                                     </div>
                                                     <div className="ml-4">
                                                         <div className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
@@ -2196,6 +3146,9 @@ export function FileBrowser() {
                                                         canDelete={canDeleteFile(file)}
                                                         canShare={canShareFile(file)}
                                                         currentUserId={user?.id}
+                                                        currentUserRole={user?.role}
+                                                        canUseAi={aiStatus.hasAccess}
+                                                        aiEnabled={aiStatus.enabled}
                                                         onPreview={handlePreview}
                                                         onShare={handleShare}
                                                         onDownload={handleDownload}
@@ -2204,9 +3157,17 @@ export function FileBrowser() {
                                                         onLock={handleLockToggle}
                                                         onActivity={handleViewActivity}
                                                         onMove={openMoveModal}
+                                                        onCopy={handleCopy}
                                                         onDelete={handleDelete}
                                                         onProperties={handleViewProperties}
                                                         onToggleCompanyFolder={handleToggleCompanyFolder}
+                                                        onAiSummarize={handleAiSummarize}
+                                                        onAiQuestion={handleAiQuestion}
+                                                        groups={groups}
+                                                        isInsideGroup={!!currentGroup}
+                                                        onAddToGroup={handleAddToGroup}
+                                                        onRemoveFromGroup={handleRemoveFromGroup}
+                                                        onCreateGroupFromFile={handleCreateGroupFromFile}
                                                         buttonRef={{ current: menuButtonRefs.current.get(`list-${file.id}`) || null }}
                                                     />
                                                 )}
@@ -2281,6 +3242,39 @@ export function FileBrowser() {
                     )}
                 </div>
             </div>
+
+            {/* Create Group Modal */}
+            <CreateGroupModal
+                isOpen={isCreateGroupOpen}
+                onClose={() => { setIsCreateGroupOpen(false); setPendingGroupFile(null); }}
+                onCreate={handleCreateGroup}
+                initialFileName={pendingGroupFile?.name}
+            />
+
+            {/* File Group Viewer Modal */}
+            <FileGroupViewer
+                isOpen={isGroupViewerOpen}
+                isMinimized={isGroupViewerMinimized}
+                group={viewingGroup}
+                files={groupFiles}
+                isLoadingFiles={isLoadingGroupFiles}
+                onClose={() => { setIsGroupViewerOpen(false); setIsGroupViewerMinimized(false); setViewingGroup(null); setGroupFiles([]); setIsLoadingGroupFiles(false); }}
+                onMinimize={() => setIsGroupViewerMinimized(true)}
+                onExpand={() => setIsGroupViewerMinimized(false)}
+                onPreview={handleGroupViewerPreview}
+                onDownload={handleGroupViewerDownload}
+                onRemoveFromGroup={handleGroupViewerRemove}
+                onMoveToFolder={handleGroupViewerMoveToFolder}
+                onCopy={handleGroupViewerCopy}
+                onShare={handleGroupViewerShare}
+                onProperties={handleGroupViewerProperties}
+                onAiSummarize={handleGroupViewerAiSummarize}
+                onAiQuestion={handleGroupViewerAiQuestion}
+                aiEnabled={aiStatus.enabled}
+                canUseAi={aiStatus.hasAccess}
+                companyId={companyId || ''}
+                authFetch={authFetch}
+            />
         </div>
     );
 }

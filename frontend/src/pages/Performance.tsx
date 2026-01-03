@@ -66,6 +66,7 @@ interface DetailedHealth {
   storage: {
     backend: string;
     connected: boolean;
+    latency_ms?: number;
     bucket?: string;
     replication_enabled: boolean;
     replication_mode?: string;
@@ -469,13 +470,27 @@ export default function Performance() {
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Storage</p>
                 <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                  {health?.storage.backend || 'Unknown'}
+                  {health?.storage.connected ? 'Connected' : 'Disconnected'}
                 </p>
               </div>
             </div>
-            <CheckCircle className="w-5 h-5 text-green-500" />
+            {health?.storage.connected ? (
+              <CheckCircle className="w-5 h-5 text-green-500" />
+            ) : (
+              <XCircle className="w-5 h-5 text-red-500" />
+            )}
           </div>
           <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <div className="flex justify-between">
+              <span>Backend:</span>
+              <span className="font-medium uppercase">{health?.storage.backend || 'Unknown'}</span>
+            </div>
+            {health?.storage.latency_ms !== undefined && (
+              <div className="flex justify-between">
+                <span>Latency:</span>
+                <span className="font-medium">{health.storage.latency_ms}ms</span>
+              </div>
+            )}
             {health?.storage.bucket && (
               <div className="flex justify-between">
                 <span>Bucket:</span>

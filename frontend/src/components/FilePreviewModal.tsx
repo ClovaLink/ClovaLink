@@ -64,7 +64,9 @@ export function FilePreviewModal({ isOpen, onClose, file }: FilePreviewModalProp
                     return res.blob();
                 })
                 .then(blob => {
-                    const url = URL.createObjectURL(blob);
+                    // Create a File object with the correct name so PDF viewers can use it
+                    const namedFile = new File([blob], file.name, { type: blob.type });
+                    const url = URL.createObjectURL(namedFile);
                     setMediaBlobUrl(url);
                 })
                 .catch(err => {
@@ -119,7 +121,7 @@ export function FilePreviewModal({ isOpen, onClose, file }: FilePreviewModalProp
         file.name.toLowerCase().endsWith('.log');
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-90 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black bg-opacity-90 flex items-center justify-center p-4">
             <div className="relative w-full max-w-5xl h-[80vh] bg-white dark:bg-gray-800 rounded-lg shadow-2xl flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">

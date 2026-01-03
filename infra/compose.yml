@@ -6,6 +6,9 @@ services:
     build:
       context: ../backend
       dockerfile: ../infra/Dockerfile.backend
+      network: host
+      args:
+        DATABASE_URL: postgres://postgres:password@localhost:5433/clovalink
     ports:
       - "3000:3000"
     env_file:

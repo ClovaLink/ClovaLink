@@ -113,3 +113,4 @@ credentials/
 *.orig
 .cache/
 
+.DS_Store

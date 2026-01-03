@@ -24,6 +24,7 @@ import clsx from 'clsx';
 import { NotificationPreferences } from '../components/NotificationPreferences';
 import { ImageCropModal } from '../components/ImageCropModal';
 import { PasswordInput, usePasswordPolicy, validatePassword } from '../components/PasswordInput';
+import { DiscordConnection } from '../components/DiscordConnection';
 
 interface Session {
     id: string;
@@ -853,6 +854,12 @@ export function Profile() {
                 <div className="p-0">
                     <NotificationPreferences compact />
                 </div>
+            </div>
+
+            {/* Connected Accounts */}
+            <div className="space-y-4">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">Connected Accounts</h2>
+                <DiscordConnection />
             </div>
 
             {/* Image Crop Modal */}

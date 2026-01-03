@@ -98,6 +98,7 @@ Password: password123
 | [Admin Guide](Admin-Guide) | Tenant and user management |
 | [Security](Security) | Security features and configuration |
 | [Virus Scanning](Virus-Scanning) | ClamAV integration and malware protection |
+| [Discord Integration](Discord-Integration) | Discord DM notifications setup |
 
 ## Tech Stack
 

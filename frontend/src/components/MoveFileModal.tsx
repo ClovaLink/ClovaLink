@@ -12,10 +12,18 @@ interface FolderNode {
     isExpanded: boolean;
 }
 
+interface MoveResult {
+    success: boolean;
+    error?: string;
+    duplicate?: boolean;
+    conflicting_name?: string;
+    suggested_name?: string;
+}
+
 interface MoveFileModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onMove: (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string) => Promise<void>;
+    onMove: (targetParentId: string | null, targetDepartmentId: string | null, targetVisibility: string, newName?: string) => Promise<MoveResult>;
     fileName: string;
     fileCount?: number;  // For bulk moves
     isMoving: boolean;
@@ -45,11 +53,16 @@ export function MoveFileModal({
     const [selectedVisibility, setSelectedVisibility] = useState<'department' | 'private'>(currentVisibility);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [isDuplicate, setIsDuplicate] = useState(false);
+    const [newFileName, setNewFileName] = useState('');
     
-    // Reset visibility when modal opens
+    // Reset state when modal opens
     useEffect(() => {
         if (isOpen) {
             setSelectedVisibility(currentVisibility);
+            setError('');
+            setIsDuplicate(false);
+            setNewFileName('');
         }
     }, [isOpen, currentVisibility]);
 
@@ -156,14 +169,33 @@ export function MoveFileModal({
         setSelectedPath(path);
     };
 
-    const handleMove = async () => {
+    const handleMove = async (withNewName?: boolean) => {
         setError('');
+        setIsDuplicate(false);
         try {
-            await onMove(selectedFolderId, selectedDepartment, selectedVisibility);
-            onClose();
+            const nameToUse = withNewName && newFileName.trim() ? newFileName.trim() : undefined;
+            const result = await onMove(selectedFolderId, selectedDepartment, selectedVisibility, nameToUse);
+            
+            if (result.success) {
+                onClose();
+            } else if (result.duplicate) {
+                setIsDuplicate(true);
+                setNewFileName(result.suggested_name || fileName);
+                setError(result.error || `A file with this name already exists in the target location`);
+            } else {
+                setError(result.error || 'Failed to move file');
+            }
         } catch (err) {
             setError('Failed to move file');
         }
+    };
+    
+    const handleMoveWithRename = async () => {
+        if (!newFileName.trim()) {
+            setError('Please enter a new file name');
+            return;
+        }
+        await handleMove(true);
     };
 
     const renderFolderNode = (node: FolderNode, depth: number = 0): React.ReactElement => {
@@ -220,7 +252,7 @@ export function MoveFileModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
             <div className="flex items-center justify-center min-h-screen px-4">
                 <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} />
                 
@@ -345,12 +377,32 @@ export function MoveFileModal({
                         )}
                     </div>
 
-                    {/* Error */}
+                    {/* Error / Duplicate Handling */}
                     {error && (
                         <div className="px-4 pb-2">
-                            <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm">
+                            <div className={clsx(
+                                "p-3 rounded-lg text-sm",
+                                isDuplicate 
+                                    ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700"
+                                    : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+                            )}>
                                 {error}
                             </div>
+                            
+                            {isDuplicate && (
+                                <div className="mt-3 space-y-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Rename file to:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newFileName}
+                                        onChange={(e) => setNewFileName(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                        placeholder="Enter new file name"
+                                    />
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -362,16 +414,29 @@ export function MoveFileModal({
                         >
                             Cancel
                         </button>
-                        <button
-                            onClick={handleMove}
-                            disabled={isMoving}
-                            className={clsx(
-                                "flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium",
-                                isMoving ? "opacity-50 cursor-not-allowed" : "hover:bg-primary-700"
-                            )}
-                        >
-                            {isMoving ? 'Moving...' : 'Move Here'}
-                        </button>
+                        {isDuplicate ? (
+                            <button
+                                onClick={handleMoveWithRename}
+                                disabled={isMoving || !newFileName.trim()}
+                                className={clsx(
+                                    "flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium",
+                                    (isMoving || !newFileName.trim()) ? "opacity-50 cursor-not-allowed" : "hover:bg-primary-700"
+                                )}
+                            >
+                                {isMoving ? 'Moving...' : 'Move with New Name'}
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => handleMove()}
+                                disabled={isMoving}
+                                className={clsx(
+                                    "flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium",
+                                    isMoving ? "opacity-50 cursor-not-allowed" : "hover:bg-primary-700"
+                                )}
+                            >
+                                {isMoving ? 'Moving...' : 'Move Here'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

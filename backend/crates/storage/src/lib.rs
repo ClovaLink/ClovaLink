@@ -57,6 +57,9 @@ pub trait Storage: Send + Sync {
     /// Returns a tuple of (stream, file_size_bytes) for setting Content-Length header
     /// This is the preferred method for large file downloads when presigned URLs aren't available
     async fn download_stream(&self, key: &str) -> Result<(StorageByteStream, u64), Box<dyn Error + Send + Sync>>;
+    
+    /// Health check - tests connectivity and returns latency in milliseconds
+    async fn health_check(&self) -> Result<u64, Box<dyn Error + Send + Sync>>;
 }
 
 pub struct S3Storage {
@@ -314,6 +317,18 @@ impl Storage for S3Storage {
         
         Ok((Box::pin(reader_stream), size))
     }
+    
+    async fn health_check(&self) -> Result<u64, Box<dyn Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        // Use list_objects_v2 with max_keys=1 as a lightweight connectivity test
+        self.client
+            .list_objects_v2()
+            .bucket(&self.bucket)
+            .max_keys(1)
+            .send()
+            .await?;
+        Ok(start.elapsed().as_millis() as u64)
+    }
 }
 
 pub struct LocalStorage {
@@ -443,5 +458,15 @@ impl Storage for LocalStorage {
         let stream = ReaderStream::new(file);
         
         Ok((Box::pin(stream), size))
+    }
+    
+    async fn health_check(&self) -> Result<u64, Box<dyn Error + Send + Sync>> {
+        let start = std::time::Instant::now();
+        // Check if base path exists and is accessible
+        if self.base_path.exists() && self.base_path.is_dir() {
+            Ok(start.elapsed().as_millis() as u64)
+        } else {
+            Err("Local storage path does not exist or is not a directory".into())
+        }
     }
 }

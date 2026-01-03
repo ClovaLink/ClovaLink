@@ -797,6 +797,23 @@ pub async fn public_upload(
                         file_id,
                         file_request.id,
                     ).await;
+                    
+                    // Also send Discord DM notification (fire-and-forget)
+                    let pool_clone = state.pool.clone();
+                    let tenant_id = file_request.tenant_id;
+                    let owner_id = file_request.created_by;
+                    let file_name = first_file.original_filename.clone();
+                    let request_name = file_request.name.clone();
+                    tokio::spawn(async move {
+                        crate::discord::notify_file_upload(
+                            &pool_clone,
+                            tenant_id,
+                            owner_id,
+                            &file_name,
+                            "External user",
+                            &request_name,
+                        ).await;
+                    });
                 }
             }
         }

@@ -947,6 +947,12 @@ fn format_action_display(action: &str) -> String {
         // Security
         "security_alert" => "Security alert".to_string(),
         
+        // AI operations
+        "ai_summarize" => "Generated AI summary".to_string(),
+        "ai_summary_viewed" => "Viewed AI summary".to_string(),
+        "ai_answer" => "Asked AI a question".to_string(),
+        "ai_settings_updated" => "Updated AI settings".to_string(),
+        
         // Default: convert snake_case to Title Case
         _ => action
             .split('_')
@@ -1077,6 +1083,33 @@ fn format_audit_description(action: &str, user: &str, resource: &str, metadata: 
         
         // Security
         "security_alert" => format!("Security alert: {}", resource),
+        
+        // AI operations
+        "ai_summarize" => {
+            if let Some(meta) = metadata {
+                let file_name = meta.get("file_name").and_then(|v| v.as_str()).unwrap_or(resource);
+                format!("{} generated AI summary for \"{}\"", user, file_name)
+            } else {
+                format!("{} generated AI summary for \"{}\"", user, resource)
+            }
+        },
+        "ai_summary_viewed" => {
+            if let Some(meta) = metadata {
+                let file_name = meta.get("file_name").and_then(|v| v.as_str()).unwrap_or(resource);
+                format!("{} viewed AI summary for \"{}\"", user, file_name)
+            } else {
+                format!("{} viewed AI summary for \"{}\"", user, resource)
+            }
+        },
+        "ai_answer" => {
+            if let Some(meta) = metadata {
+                let file_name = meta.get("file_name").and_then(|v| v.as_str()).unwrap_or(resource);
+                format!("{} asked AI about \"{}\"", user, file_name)
+            } else {
+                format!("{} asked AI about \"{}\"", user, resource)
+            }
+        },
+        "ai_settings_updated" => format!("{} updated AI settings", user),
         
         // Default fallback
         _ => {

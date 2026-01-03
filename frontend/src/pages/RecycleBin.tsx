@@ -306,7 +306,7 @@ export default function RecycleBin() {
                                         </div>
                                         {/* Deleted Date */}
                                         <div className="md:col-span-2 text-xs md:text-sm">
-                                            {safeFormatDate(item.deleted_at || item.modified)}
+                                        {safeFormatDate(item.deleted_at || item.modified)}
                                         </div>
                                     </div>
                                 ) : (

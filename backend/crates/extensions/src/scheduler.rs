@@ -328,25 +328,24 @@ pub async fn create_automation_job(
 
     let next_run = next_run_from_cron(cron_expression)?;
 
-    let job = sqlx::query_as!(
-        AutomationJob,
+    let job: AutomationJob = sqlx::query_as(
         r#"
         INSERT INTO automation_jobs (extension_id, tenant_id, name, cron_expression, next_run_at, config)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, extension_id, tenant_id, name, cron_expression, 
                   next_run_at, last_run_at, last_status, last_error, 
                   enabled, config, created_at, updated_at
-        "#,
-        extension_id,
-        tenant_id,
-        name,
-        cron_expression,
-        next_run,
-        config
+        "#
     )
+    .bind(extension_id)
+    .bind(tenant_id)
+    .bind(name)
+    .bind(cron_expression)
+    .bind(next_run)
+    .bind(config)
     .fetch_one(pool)
     .await
-    .map_err(|e| SchedulerError::DatabaseError(e.to_string()))?;
+    .map_err(|e: sqlx::Error| SchedulerError::DatabaseError(e.to_string()))?;
 
     Ok(job)
 }

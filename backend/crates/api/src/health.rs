@@ -120,6 +120,7 @@ pub struct RedisHealth {
 pub struct StorageHealth {
     pub backend: String,
     pub connected: bool,
+    pub latency_ms: Option<u64>,
     pub bucket: Option<String>,
     pub replication_enabled: bool,
     pub replication_mode: Option<String>,
@@ -219,7 +220,7 @@ pub async fn detailed_health(
         details: None,
     });
 
-    // Storage check
+    // Storage check with actual connectivity test
     let storage_type = std::env::var("STORAGE_TYPE").unwrap_or_else(|_| "local".to_string());
     let storage_bucket = if storage_type == "s3" {
         std::env::var("S3_BUCKET").ok()
@@ -227,14 +228,20 @@ pub async fn detailed_health(
         None
     };
 
-    // For storage, we assume it's connected if the app started successfully
-    // A more thorough check would involve listing/writing a test file
-    let storage_connected = true;
+    // Actually test storage connectivity
+    let (storage_connected, storage_latency) = match state.storage.health_check().await {
+        Ok(latency) => (true, Some(latency)),
+        Err(e) => {
+            tracing::warn!("Storage health check failed: {}", e);
+            all_healthy = false;
+            (false, None)
+        }
+    };
 
     checks.push(HealthCheck {
         name: "storage".to_string(),
         status: if storage_connected { "healthy" } else { "unhealthy" }.to_string(),
-        latency_ms: None,
+        latency_ms: storage_latency,
         details: Some(json!({
             "backend": storage_type,
             "bucket": storage_bucket
@@ -313,6 +320,7 @@ pub async fn detailed_health(
         storage: StorageHealth {
             backend: storage_type,
             connected: storage_connected,
+            latency_ms: storage_latency,
             bucket: storage_bucket,
             replication_enabled: state.replication_config.enabled,
             replication_mode: if state.replication_config.enabled {

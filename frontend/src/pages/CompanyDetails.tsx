@@ -33,6 +33,8 @@ import { ComplianceBanner } from '../components/ComplianceBanner';
 import { ComplianceBadge } from '../components/ComplianceBadge';
 import { LockedToggle } from '../components/LockedField';
 import { TenantEmailTemplates } from '../components/TenantEmailTemplates';
+import { TenantAiSettings } from '../components/TenantAiSettings';
+import { TenantDiscordSettings } from '../components/TenantDiscordSettings';
 import clsx from 'clsx';
 
 interface Tenant {
@@ -79,7 +81,7 @@ export function CompanyDetails() {
     const [company, setCompany] = useState<Tenant | null>(null);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates' | 'ai' | 'discord'>('overview');
     
     // Notification settings state
     const [notificationSettings, setNotificationSettings] = useState<any[]>([]);
@@ -738,7 +740,7 @@ export function CompanyDetails() {
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-gray-700">
                 <nav className="-mb-px flex space-x-8 overflow-x-auto">
-                    {['overview', 'settings', 'departments', 'users', 'notifications', 'email-templates', 'audit'].map((tab) => (
+                    {['overview', 'settings', 'departments', 'users', 'notifications', 'email-templates', 'ai', 'discord', 'audit'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
@@ -749,7 +751,7 @@ export function CompanyDetails() {
                                     : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             )}
                         >
-                            {tab === 'audit' ? 'Audit Settings' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            {tab === 'audit' ? 'Audit Settings' : tab === 'ai' ? 'AI' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                     ))}
                 </nav>
@@ -2071,6 +2073,20 @@ export function CompanyDetails() {
 
                 {activeTab === 'email-templates' && company && (
                     <TenantEmailTemplates
+                        tenantId={company.id}
+                        authFetch={authFetch}
+                    />
+                )}
+
+                {activeTab === 'ai' && company && (
+                    <TenantAiSettings
+                        tenantId={company.id}
+                        authFetch={authFetch}
+                    />
+                )}
+
+                {activeTab === 'discord' && company && (
+                    <TenantDiscordSettings
                         tenantId={company.id}
                         authFetch={authFetch}
                     />

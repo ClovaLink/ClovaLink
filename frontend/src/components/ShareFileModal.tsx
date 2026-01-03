@@ -1,7 +1,16 @@
-import { useState } from 'react';
-import { X, Link2, Copy, Check, Globe, Lock, Calendar, AlertCircle, Loader2, Folder, FileText } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Link2, Copy, Check, Globe, Lock, Calendar, AlertCircle, Loader2, Folder, FileText, Users, User, Search, X as XIcon, Building } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuthFetch } from '../context/AuthContext';
+
+interface ShareableUser {
+    id: string;
+    name: string;
+    email: string;
+    department_id: string | null;
+    department_name: string | null;
+    role: string;
+}
 
 interface ShareFileModalProps {
     isOpen: boolean;
@@ -18,6 +27,7 @@ interface ShareFileModalProps {
 export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMode }: ShareFileModalProps) {
     const isFolder = file.type === 'folder';
     const authFetch = useAuthFetch();
+    const [shareType, setShareType] = useState<'link' | 'user'>('link');
     const [isPublic, setIsPublic] = useState(false);
     const [hasExpiration, setHasExpiration] = useState(false);
     const [expirationDays, setExpirationDays] = useState(7);
@@ -25,30 +35,81 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
     const [shareLink, setShareLink] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // User-specific sharing state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [shareableUsers, setShareableUsers] = useState<ShareableUser[]>([]);
+    const [selectedUser, setSelectedUser] = useState<ShareableUser | null>(null);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [userShareSuccess, setUserShareSuccess] = useState(false);
 
     // Check if public sharing is blocked by compliance mode
     const isComplianceMode = complianceMode && ['HIPAA', 'SOC2', 'GDPR'].includes(complianceMode);
+
+    // Search for shareable users
+    const searchUsers = useCallback(async (query: string) => {
+        if (!query.trim()) {
+            setShareableUsers([]);
+            return;
+        }
+        
+        setSearchLoading(true);
+        try {
+            const res = await authFetch(`/api/users/${companyId}/shareable?search=${encodeURIComponent(query)}`);
+            if (res.ok) {
+                const data = await res.json();
+                setShareableUsers(data.users || []);
+            }
+        } catch {
+            // Ignore search errors
+        } finally {
+            setSearchLoading(false);
+        }
+    }, [authFetch, companyId]);
+
+    // Debounced search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            searchUsers(searchQuery);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery, searchUsers]);
 
     const handleCreateShare = async () => {
         setIsCreating(true);
         setError(null);
 
         try {
+            const body: Record<string, unknown> = {
+                is_public: shareType === 'user' ? false : isPublic,
+                expires_in_days: hasExpiration ? expirationDays : null,
+            };
+            
+            // Add user-specific sharing if a user is selected
+            if (shareType === 'user' && selectedUser) {
+                body.shared_with_user_id = selectedUser.id;
+            }
+            
             const response = await authFetch(`/api/files/${companyId}/${file.id}/share`, {
                 method: 'POST',
-                body: JSON.stringify({
-                    is_public: isPublic,
-                    expires_in_days: hasExpiration ? expirationDays : null,
-                }),
+                body: JSON.stringify(body),
             });
 
             if (response.ok) {
                 const data = await response.json();
-                setShareLink(data.link);
+                if (shareType === 'user' && selectedUser) {
+                    setUserShareSuccess(true);
+                } else {
+                    setShareLink(data.link);
+                }
             } else if (response.status === 403) {
-                setError('Public sharing is not allowed in your compliance mode.');
+                if (shareType === 'user') {
+                    setError('You cannot share with this user. They may be in a different department.');
+                } else {
+                    setError('Public sharing is not allowed in your compliance mode.');
+                }
             } else {
-                setError('Failed to create share link. Please try again.');
+                setError('Failed to create share. Please try again.');
             }
         } catch (err) {
             setError('An error occurred. Please try again.');
@@ -72,13 +133,18 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
         setExpirationDays(7);
         setError(null);
         setCopied(false);
+        setShareType('link');
+        setSearchQuery('');
+        setShareableUsers([]);
+        setSelectedUser(null);
+        setUserShareSuccess(false);
         onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
             <div className="flex min-h-full items-center justify-center p-4">
                 {/* Backdrop */}
                 <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleClose} />
@@ -112,6 +178,7 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
 
                     {/* Content */}
                     <div className="p-6">
+                        {/* Success States */}
                         {shareLink ? (
                             // Success state - show the link
                             <div className="space-y-4">
@@ -160,10 +227,150 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
                                     Done
                                 </button>
                             </div>
+                        ) : userShareSuccess ? (
+                            // User share success state
+                            <div className="space-y-4">
+                                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300 text-sm font-medium mb-2">
+                                        <Check className="w-4 h-4" />
+                                        Shared with {selectedUser?.name}!
+                                    </div>
+                                    <p className="text-xs text-green-600 dark:text-green-400">
+                                        {selectedUser?.name} can now access "{file.name}" and will be notified.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={handleClose}
+                                    className="w-full py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                                >
+                                    Done
+                                </button>
+                            </div>
                         ) : (
                             // Configuration state
                             <div className="space-y-5">
-                                {/* Access Type */}
+                                {/* Share Type Tabs */}
+                                <div className="flex border-b border-gray-200 dark:border-gray-700">
+                                    <button
+                                        onClick={() => setShareType('link')}
+                                        className={clsx(
+                                            "flex-1 py-2 text-sm font-medium border-b-2 transition-colors",
+                                            shareType === 'link'
+                                                ? "border-primary-500 text-primary-600 dark:text-primary-400"
+                                                : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-center gap-2">
+                                            <Link2 className="w-4 h-4" />
+                                            Share Link
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setShareType('user')}
+                                        className={clsx(
+                                            "flex-1 py-2 text-sm font-medium border-b-2 transition-colors",
+                                            shareType === 'user'
+                                                ? "border-primary-500 text-primary-600 dark:text-primary-400"
+                                                : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-center gap-2">
+                                            <User className="w-4 h-4" />
+                                            Share with User
+                                        </div>
+                                    </button>
+                                </div>
+
+                                {/* User Sharing */}
+                                {shareType === 'user' && (
+                                    <div className="space-y-3">
+                                        {/* Selected User Display */}
+                                        {selectedUser ? (
+                                            <div className="flex items-center justify-between p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-800 flex items-center justify-center text-primary-700 dark:text-primary-300 text-sm font-medium">
+                                                        {selectedUser.name?.charAt(0)?.toUpperCase() || '?'}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-gray-900 dark:text-white">{selectedUser.name}</p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">{selectedUser.email}</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setSelectedUser(null)}
+                                                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                >
+                                                    <XIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Search Input */}
+                                                <div className="relative">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                    <input
+                                                        type="text"
+                                                        value={searchQuery}
+                                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                                        placeholder="Search users by name or email..."
+                                                        className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                    />
+                                                    {searchLoading && (
+                                                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />
+                                                    )}
+                                                </div>
+
+                                                {/* Search Results */}
+                                                {shareableUsers.length > 0 && (
+                                                    <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-100 dark:divide-gray-700">
+                                                        {shareableUsers.map((user) => (
+                                                            <button
+                                                                key={user.id}
+                                                                onClick={() => {
+                                                                    setSelectedUser(user);
+                                                                    setSearchQuery('');
+                                                                    setShareableUsers([]);
+                                                                }}
+                                                                className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 text-sm font-medium">
+                                                                    {user.name?.charAt(0)?.toUpperCase() || '?'}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user.name}</p>
+                                                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
+                                                                </div>
+                                                                {user.department_name && (
+                                                                    <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                                                        <Building className="w-3 h-3" />
+                                                                        {user.department_name}
+                                                                    </span>
+                                                                )}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Empty State */}
+                                                {searchQuery && !searchLoading && shareableUsers.length === 0 && (
+                                                    <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+                                                        No users found. Try a different search term.
+                                                    </div>
+                                                )}
+
+                                                {/* Hint */}
+                                                {!searchQuery && (
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                                        Search for a user in your department to share this {isFolder ? 'folder' : 'file'} with them.
+                                                    </p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Link Access Type - only show for link sharing */}
+                                {shareType === 'link' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                                         Who can access this link?
@@ -209,6 +416,7 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
                                         </button>
                                     </div>
                                 </div>
+                                )}
 
                                 {/* Expiration */}
                                 <div>
@@ -273,13 +481,18 @@ export function ShareFileModal({ isOpen, onClose, file, companyId, complianceMod
                                     </button>
                                     <button
                                         onClick={handleCreateShare}
-                                        disabled={isCreating}
-                                        className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        disabled={isCreating || (shareType === 'user' && !selectedUser)}
+                                        className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {isCreating ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                Creating...
+                                                {shareType === 'user' ? 'Sharing...' : 'Creating...'}
+                                            </>
+                                        ) : shareType === 'user' ? (
+                                            <>
+                                                <User className="w-4 h-4" />
+                                                Share with User
                                             </>
                                         ) : (
                                             <>

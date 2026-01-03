@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle, Share2 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import clsx from 'clsx';
 import { useAuth, useAuthFetch } from '../context/AuthContext';
@@ -49,6 +49,7 @@ const NAVIGATION: NavItem[] = [
     { name: 'Users', href: '/users', icon: Users, permission: 'users.view' },
     { name: 'Files', href: '/files', icon: FileText, permission: 'files.view' },
     { name: 'Requests', href: '/file-requests', icon: Link2, permission: 'requests.view' },
+    { name: 'Shared', href: '/shared-with-me', icon: Share2, permission: 'files.view' },
     { name: 'Security', href: '/security', icon: Shield, permission: 'audit.view' },
     { name: 'Performance', href: '/performance', icon: Activity, permission: null, superAdminOnly: true },
     { name: 'Settings', href: '/settings', icon: Settings, permission: 'settings.view' },

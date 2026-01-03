@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Eye, Download, Trash2, Star, Edit2, Share2,
-    Lock, Unlock, History, Move, Info, Building2
+    Lock, Unlock, History, Move, Info, Building2, Sparkles, MessageSquare, FileSearch, Copy,
+    Layers, FolderMinus, ChevronRight, Plus
 } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface FileItem {
     id: string;
     name: string;
-    type: 'folder' | 'image' | 'document' | 'video' | 'audio';
+    type: 'folder' | 'image' | 'document' | 'video' | 'audio' | 'group';
     size?: string;
     size_bytes?: number;
     modified: string;
@@ -28,6 +29,14 @@ export interface FileItem {
     content_type?: string;
     storage_path?: string;
     is_company_folder?: boolean;
+    color?: string;
+    file_count?: number;
+}
+
+interface FileGroup {
+    id: string;
+    name: string;
+    color?: string;
 }
 
 interface FileActionMenuProps {
@@ -39,6 +48,11 @@ interface FileActionMenuProps {
     canDelete: boolean;
     canShare: boolean;  // Only owner, manager, or admin can share
     currentUserId?: string;  // Current user's ID for ownership checks
+    currentUserRole?: string;  // Current user's role for lock requirement checks
+    canUseAi?: boolean;  // Whether user has access to AI features
+    aiEnabled?: boolean;  // Whether AI is enabled for the tenant
+    groups?: FileGroup[];  // Available groups to add files to
+    isInsideGroup?: boolean;  // Whether we're viewing files inside a group
     onPreview: (file: FileItem) => void;
     onShare: (file: FileItem) => void;
     onDownload: (file: FileItem) => void;
@@ -47,9 +61,15 @@ interface FileActionMenuProps {
     onLock: (file: FileItem) => void;
     onActivity: (file: FileItem) => void;
     onMove: (file: FileItem) => void;
+    onCopy: (file: FileItem) => void;
     onDelete: (file: FileItem) => void;
     onProperties: (file: FileItem) => void;
     onToggleCompanyFolder?: (file: FileItem) => void;
+    onAiSummarize?: (file: FileItem) => void;
+    onAiQuestion?: (file: FileItem) => void;
+    onAddToGroup?: (file: FileItem, groupId: string) => void;
+    onRemoveFromGroup?: (file: FileItem) => void;
+    onCreateGroupFromFile?: (file: FileItem) => void;  // Opens modal to create group with this file
     buttonRef?: { current: HTMLButtonElement | null };
 }
 
@@ -65,6 +85,11 @@ export function FileActionMenu({
     canDelete,
     canShare,
     currentUserId,
+    currentUserRole,
+    canUseAi,
+    aiEnabled,
+    groups = [],
+    isInsideGroup = false,
     onPreview,
     onShare,
     onDownload,
@@ -73,19 +98,54 @@ export function FileActionMenu({
     onLock,
     onActivity,
     onMove,
+    onCopy,
     onDelete,
     onProperties,
     onToggleCompanyFolder,
+    onAiSummarize,
+    onAiQuestion,
+    onAddToGroup,
+    onRemoveFromGroup,
+    onCreateGroupFromFile,
     buttonRef,
 }: FileActionMenuProps) {
     const isFile = file.type !== 'folder';
     // Case-insensitive check for compliance mode (backend may return "HIPAA", "Hipaa", etc.)
     const isComplianceMode = ['hipaa', 'soc2', 'gdpr'].includes(complianceMode?.toLowerCase() || '');
     
-    // Check if user can access locked file (they're the locker, owner, or admin - admin checked via canShare/canLockFiles)
+    // Role hierarchy for lock requirement checks
+    const getRoleLevel = (role: string) => {
+        switch(role) {
+            case 'SuperAdmin': return 100;
+            case 'Admin': return 80;
+            case 'Manager': return 60;
+            case 'Employee': return 40;
+            default: return 20;
+        }
+    };
+    
+    // Check if user can access locked file
     const isOwner = currentUserId && file.owner_id === currentUserId;
     const isLocker = currentUserId && file.locked_by === currentUserId;
-    const canAccessLockedFile = !file.is_locked || isLocker || isOwner || canLockFiles;
+    
+    // Check if user's role meets the lock requirement
+    const meetsRoleRequirement = () => {
+        if (!file.lock_requires_role) return false; // No role specified = only owner/locker can access
+        if (!currentUserRole) return false;
+        // SuperAdmin/Admin bypass all locks
+        if (currentUserRole === 'SuperAdmin' || currentUserRole === 'Admin') return true;
+        return getRoleLevel(currentUserRole) >= getRoleLevel(file.lock_requires_role);
+    };
+    
+    const canAccessLockedFile = !file.is_locked || isLocker || isOwner || meetsRoleRequirement();
+    
+    // Check if AI actions are available (file must be text-based)
+    const isTextFile = isFile && (
+        ['text/plain', 'text/markdown', 'text/csv', 'text/html', 'application/json', 'text/xml'].some(
+            type => file.content_type?.startsWith(type.split('/')[0]) || file.content_type === type
+        ) || file.name?.match(/\.(txt|md|json|xml|csv|html|htm|js|ts|jsx|tsx|py|rs|go|java|c|cpp|h|css|scss|yaml|yml)$/i)
+    );
+    const showAiActions = aiEnabled && canUseAi && isTextFile && canAccessLockedFile;
 
     const [position, setPosition] = useState({ top: 0, right: 0 });
 
@@ -133,16 +193,30 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Star - always visible */}
-                <button className={menuItemClass} onClick={() => onStar(file)}>
-                    <Star className={clsx("w-4 h-4 mr-2", file.is_starred ? "text-yellow-400 fill-current" : "text-gray-400")} />
-                    {file.is_starred ? "Unstar" : "Star"}
-                </button>
+                {/* Star - requires access to locked files */}
+                {canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onStar(file)}>
+                        <Star className={clsx("w-4 h-4 mr-2", file.is_starred ? "text-yellow-400 fill-current" : "text-gray-400")} />
+                        {file.is_starred ? "Unstar" : "Star"}
+                    </button>
+                )}
 
                 {/* Download - requires access to locked files */}
                 {canAccessLockedFile && (
                     <button className={menuItemClass} onClick={() => onDownload(file)}>
                         <Download className="w-4 h-4 mr-2 text-gray-400" /> Download
+                    </button>
+                )}
+
+                {/* AI Actions - Only for text files when AI is enabled */}
+                {showAiActions && onAiSummarize && (
+                    <button className={menuItemClass} onClick={() => onAiSummarize(file)}>
+                        <Sparkles className="w-4 h-4 mr-2 text-purple-500" /> Summarize
+                    </button>
+                )}
+                {showAiActions && onAiQuestion && (
+                    <button className={menuItemClass} onClick={() => onAiQuestion(file)}>
+                        <MessageSquare className="w-4 h-4 mr-2 text-purple-500" /> Ask AI
                     </button>
                 )}
 
@@ -184,6 +258,51 @@ export function FileActionMenu({
                     </button>
                 )}
 
+                {/* Copy - Only for files (not folders/groups), requires access to locked files */}
+                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onCopy(file)}>
+                        <Copy className="w-4 h-4 mr-2 text-gray-400" /> Copy
+                    </button>
+                )}
+
+                {/* Create Group from File - Only for files */}
+                {file.type !== 'folder' && file.type !== 'group' && onCreateGroupFromFile && canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onCreateGroupFromFile(file)}>
+                        <Plus className="w-4 h-4 mr-2 text-green-500" /> Create Group...
+                    </button>
+                )}
+
+                {/* Add to Group - Only for files, when groups are available */}
+                {file.type !== 'folder' && file.type !== 'group' && onAddToGroup && groups.length > 0 && canAccessLockedFile && (
+                    <div className="relative group/addgroup">
+                        <button className={`${menuItemClass} justify-between`}>
+                            <span className="flex items-center">
+                                <Layers className="w-4 h-4 mr-2 text-gray-400" /> Add to Group
+                            </span>
+                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                        </button>
+                        <div className="absolute left-full top-0 ml-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup:opacity-100 group-hover/addgroup:visible transition-all z-[60]">
+                            {groups.map(g => (
+                                <button
+                                    key={g.id}
+                                    className={menuItemClass}
+                                    onClick={() => onAddToGroup(file, g.id)}
+                                >
+                                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: g.color || '#3B82F6' }} />
+                                    <span className="truncate">{g.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Remove from Group - When viewing inside a group */}
+                {file.type !== 'folder' && file.type !== 'group' && isInsideGroup && onRemoveFromGroup && (
+                    <button className={menuItemClass} onClick={() => onRemoveFromGroup(file)}>
+                        <FolderMinus className="w-4 h-4 mr-2 text-orange-400" /> Remove from Group
+                    </button>
+                )}
+
                 {/* Toggle Company Folder - Folders only, Admin+ */}
                 {file.type === 'folder' && onToggleCompanyFolder && canLockFiles && (
                     <button className={`${menuItemClass} whitespace-nowrap`} onClick={() => onToggleCompanyFolder(file)}>
@@ -192,10 +311,12 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Properties */}
-                <button className={menuItemClass} onClick={() => onProperties(file)}>
-                    <Info className="w-4 h-4 mr-2 text-gray-400" /> Properties
-                </button>
+                {/* Properties - requires access to locked files */}
+                {canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onProperties(file)}>
+                        <Info className="w-4 h-4 mr-2 text-gray-400" /> Properties
+                    </button>
+                )}
 
                 <div className={dividerClass}></div>
 
@@ -243,16 +364,30 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Star - always visible */}
-                <button className={menuItemClass} onClick={() => onStar(file)}>
-                    <Star className={clsx("w-4 h-4 mr-2", file.is_starred ? "text-yellow-400 fill-current" : "text-gray-400")} />
-                    {file.is_starred ? "Unstar" : "Star"}
-                </button>
+                {/* Star - requires access to locked files */}
+                {canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onStar(file)}>
+                        <Star className={clsx("w-4 h-4 mr-2", file.is_starred ? "text-yellow-400 fill-current" : "text-gray-400")} />
+                        {file.is_starred ? "Unstar" : "Star"}
+                    </button>
+                )}
 
                 {/* Download - requires access to locked files */}
                 {canAccessLockedFile && (
                     <button className={menuItemClass} onClick={() => onDownload(file)}>
                         <Download className="w-4 h-4 mr-2 text-gray-400" /> Download
+                    </button>
+                )}
+
+                {/* AI Actions - Only for text files when AI is enabled */}
+                {showAiActions && onAiSummarize && (
+                    <button className={menuItemClass} onClick={() => onAiSummarize(file)}>
+                        <Sparkles className="w-4 h-4 mr-2 text-purple-500" /> Summarize
+                    </button>
+                )}
+                {showAiActions && onAiQuestion && (
+                    <button className={menuItemClass} onClick={() => onAiQuestion(file)}>
+                        <MessageSquare className="w-4 h-4 mr-2 text-purple-500" /> Ask AI
                     </button>
                 )}
 
@@ -294,6 +429,51 @@ export function FileActionMenu({
                     </button>
                 )}
 
+                {/* Copy - Only for files (not folders/groups), requires access to locked files */}
+                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onCopy(file)}>
+                        <Copy className="w-4 h-4 mr-2 text-gray-400" /> Copy
+                    </button>
+                )}
+
+                {/* Create Group from File - Only for files */}
+                {file.type !== 'folder' && file.type !== 'group' && onCreateGroupFromFile && canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onCreateGroupFromFile(file)}>
+                        <Plus className="w-4 h-4 mr-2 text-green-500" /> Create Group...
+                    </button>
+                )}
+
+                {/* Add to Group - Only for files, when groups are available */}
+                {file.type !== 'folder' && file.type !== 'group' && onAddToGroup && groups.length > 0 && canAccessLockedFile && (
+                    <div className="relative group/addgroup2">
+                        <button className={`${menuItemClass} justify-between`}>
+                            <span className="flex items-center">
+                                <Layers className="w-4 h-4 mr-2 text-gray-400" /> Add to Group
+                            </span>
+                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                        </button>
+                        <div className="absolute left-full top-0 ml-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup2:opacity-100 group-hover/addgroup2:visible transition-all z-[60]">
+                            {groups.map(g => (
+                                <button
+                                    key={g.id}
+                                    className={menuItemClass}
+                                    onClick={() => onAddToGroup(file, g.id)}
+                                >
+                                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: g.color || '#3B82F6' }} />
+                                    <span className="truncate">{g.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Remove from Group - When viewing inside a group */}
+                {file.type !== 'folder' && file.type !== 'group' && isInsideGroup && onRemoveFromGroup && (
+                    <button className={menuItemClass} onClick={() => onRemoveFromGroup(file)}>
+                        <FolderMinus className="w-4 h-4 mr-2 text-orange-400" /> Remove from Group
+                    </button>
+                )}
+
                 {/* Toggle Company Folder - Folders only, Admin+ */}
                 {file.type === 'folder' && onToggleCompanyFolder && canLockFiles && (
                     <button className={menuItemClass} onClick={() => onToggleCompanyFolder(file)}>
@@ -302,10 +482,12 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Properties */}
-                <button className={menuItemClass} onClick={() => onProperties(file)}>
-                    <Info className="w-4 h-4 mr-2 text-gray-400" /> Properties
-                </button>
+                {/* Properties - requires access to locked files */}
+                {canAccessLockedFile && (
+                    <button className={menuItemClass} onClick={() => onProperties(file)}>
+                        <Info className="w-4 h-4 mr-2 text-gray-400" /> Properties
+                    </button>
+                )}
 
                 <div className={dividerClass}></div>
 
