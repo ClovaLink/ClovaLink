@@ -2,6 +2,23 @@
 
 Welcome to ClovaLink - an open-source, multi-tenant file management and compliance platform built with Rust and React.
 
+## Screenshots
+
+<table>
+<tr>
+<td width="50%">
+<img src="../assets/screenshots/dashboard.png" alt="Dashboard" width="100%">
+<p align="center"><b>Dashboard</b></p>
+</td>
+<td width="50%">
+<img src="../assets/screenshots/filemanager.png" alt="File Browser" width="100%">
+<p align="center"><b>File Browser</b></p>
+</td>
+</tr>
+</table>
+
+**[View all 23 screenshots →](Screenshots.md)**
+
 ## Overview
 
 ClovaLink provides secure file storage, sharing, and compliance features for organizations of all sizes. It supports multiple compliance frameworks (HIPAA, SOX, GDPR) and offers a flexible extension system for customization.
@@ -100,6 +117,7 @@ Password: password123
 
 | Section | Description |
 |---------|-------------|
+| [Screenshots](Screenshots) | Visual tour of all features |
 | [API Reference](API-Reference) | Complete REST API documentation |
 | [Architecture](Architecture) | System design and data flows |
 | [Deployment Guide](Deployment-Guide) | Production deployment instructions |

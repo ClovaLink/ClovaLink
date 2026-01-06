@@ -2,6 +2,11 @@
 
 This document covers ClovaLink's security features, configuration options, and best practices.
 
+<p align="center">
+<img src="../assets/screenshots/Security.png" alt="Security Alerts Dashboard" width="80%">
+<br><em>Security Alerts Dashboard — Real-time monitoring for suspicious activity</em>
+</p>
+
 ## Overview
 
 ClovaLink implements multiple layers of security:

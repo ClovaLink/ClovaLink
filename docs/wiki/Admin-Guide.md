@@ -2,6 +2,19 @@
 
 This guide covers administration tasks for ClovaLink, including tenant management, user management, compliance configuration, and system settings.
 
+<table>
+<tr>
+<td width="50%">
+<img src="../assets/screenshots/userpage.png" alt="User Management" width="100%">
+<p align="center"><em>User Management</em></p>
+</td>
+<td width="50%">
+<img src="../assets/screenshots/companiesettings.png" alt="Company Settings" width="100%">
+<p align="center"><em>Company Settings</em></p>
+</td>
+</tr>
+</table>
+
 ## User Roles
 
 ClovaLink has four base roles with hierarchical permissions:

@@ -32,9 +32,38 @@
 
 ## Screenshots
 
-<p align="center">
-  <i>Screenshots coming soon — Dashboard, File Browser, Security Alerts, and Settings views</i>
-</p>
+<table>
+<tr>
+<td width="50%">
+<img src="docs/assets/screenshots/dashboard.png" alt="Dashboard" width="100%">
+<p align="center"><b>Dashboard</b> — HIPAA compliance monitoring, activity charts, file analytics</p>
+</td>
+<td width="50%">
+<img src="docs/assets/screenshots/filemanager.png" alt="File Browser" width="100%">
+<p align="center"><b>File Browser</b> — Folders, file groups, quick access, department filtering</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/assets/screenshots/companiesettings.png" alt="Company Settings" width="100%">
+<p align="center"><b>Company Settings</b> — Compliance modes, storage quotas, retention policies</p>
+</td>
+<td width="50%">
+<img src="docs/assets/screenshots/Security.png" alt="Security Alerts" width="100%">
+<p align="center"><b>Security Alerts</b> — Real-time monitoring for suspicious activity</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<img src="docs/assets/screenshots/userpage.png" alt="User Management" width="100%">
+<p align="center"><b>User Management</b> — Roles, departments, status tracking</p>
+</td>
+<td width="50%">
+<img src="docs/assets/screenshots/performance.png" alt="Performance" width="100%">
+<p align="center"><b>Performance</b> — System metrics and API monitoring</p>
+</td>
+</tr>
+</table>
 
 ---
 
