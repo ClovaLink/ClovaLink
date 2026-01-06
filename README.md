@@ -77,7 +77,20 @@ Enterprise file management has become absurdly expensive:
 | Dropbox Business | $18/user/month | **$10,800** |
 | SharePoint | $12.50/user/month | **$7,500** + Microsoft tax |
 | Egnyte | $20/user/month | **$12,000** |
-| **ClovaLink** | ~$20/month VPS | **~$240** total |
+| **ClovaLink** | ~$20/month VPS + S3 storage | **~$300-400** total |
+
+#### ClovaLink Cost Breakdown
+
+| Component | Monthly Cost | Notes |
+|-----------|-------------|-------|
+| VPS (4GB RAM) | ~$20 | DigitalOcean, Linode, Hetzner, etc. |
+| **Backblaze B2** | ~$3-5 | $0.006/GB storage + $0.01/GB egress |
+| **OR Wasabi** | ~$7 | $6.99/mo minimum, no egress fees |
+| PostgreSQL | Included | Self-hosted on VPS |
+| Redis | Included | Self-hosted on VPS |
+| **Total** | **~$25-30/mo** | **~$300-360/year** for 50 users |
+
+*Storage costs based on ~500GB usage. Scales with actual usage, not user count.*
 
 Most small businesses need 80% of enterprise features at 10% of the cost. **ClovaLink delivers exactly that.**
 

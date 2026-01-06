@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, Loader2, FileSpreadsheet, Presentation, ChevronLeft, ChevronRight } from 'lucide-react';
-import * as XLSX from 'xlsx';
+
+// Helper functions to extract IDs from download URLs
+// URL format: /api/files/{companyId}/download/{fileId}
+function extractFileIdFromUrl(url: string): string | null {
+    const match = url.match(/\/download\/([a-f0-9-]+)/i);
+    return match ? match[1] : null;
+}
+
+function extractCompanyIdFromUrl(url: string): string | null {
+    const match = url.match(/\/api\/files\/([a-f0-9-]+)\//i);
+    return match ? match[1] : null;
+}
 
 interface FilePreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     file: {
+        id?: string; // File ID for backend API calls
+        companyId?: string; // Company/tenant ID for backend API calls
         name: string;
         url: string; // We'll need to generate a presigned URL or serve via proxy
         type: 'image' | 'document' | 'video' | 'audio' | 'folder';
@@ -101,44 +114,45 @@ export function FilePreviewModal({ isOpen, onClose, file }: FilePreviewModalProp
                 })
                 .finally(() => setLoading(false));
         } else if (isExcel) {
-            // Excel file preview using xlsx library
+            // Excel file preview using backend API (calamine)
             setLoading(true);
-            const previewUrl = file.url.includes('?') ? `${file.url}&preview=true` : `${file.url}?preview=true`;
-            fetch(previewUrl, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')}`
-                }
-            })
-                .then(res => {
-                    if (!res.ok) throw new Error('Failed to fetch file');
-                    return res.arrayBuffer();
-                })
-                .then(buffer => {
-                    try {
-                        const workbook = XLSX.read(buffer, { type: 'array' });
-                        const sheets: ExcelSheet[] = workbook.SheetNames.map(name => {
-                            const worksheet = workbook.Sheets[name];
-                            // Convert to array of arrays, limiting to first 1000 rows for performance
-                            const jsonData = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(worksheet, { 
-                                header: 1,
-                                defval: ''
-                            });
-                            return {
-                                name,
-                                data: jsonData.slice(0, 1000) // Limit rows for performance
-                            };
-                        });
-                        setExcelSheets(sheets);
-                    } catch (err) {
-                        console.error('Failed to parse Excel file:', err);
-                        setMediaError('Failed to parse Excel file. Try downloading instead.');
+            
+            // Try to extract file ID and company ID from the URL or use provided props
+            const fileId = file.id || extractFileIdFromUrl(file.url);
+            const companyId = file.companyId || extractCompanyIdFromUrl(file.url);
+            
+            if (fileId && companyId) {
+                // Use backend API for secure, server-side Excel parsing
+                fetch(`/api/preview/${companyId}/${fileId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token')}`
                     }
                 })
-                .catch(err => {
-                    console.error('Failed to load Excel file', err);
-                    setMediaError('Failed to load file. Please try downloading instead.');
-                })
-                .finally(() => setLoading(false));
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to fetch preview');
+                        return res.json();
+                    })
+                    .then((data: { type: string; sheets: { name: string; rows: (string | number | boolean | null)[][] }[] }) => {
+                        if (data.type === 'excel' && data.sheets) {
+                            const sheets: ExcelSheet[] = data.sheets.map(sheet => ({
+                                name: sheet.name,
+                                data: sheet.rows
+                            }));
+                            setExcelSheets(sheets);
+                        } else {
+                            setMediaError('Failed to parse Excel file. Try downloading instead.');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Failed to load Excel preview:', err);
+                        setMediaError('Failed to load file preview. Please try downloading instead.');
+                    })
+                    .finally(() => setLoading(false));
+            } else {
+                // Fallback: if no file ID, show download prompt
+                setMediaError('Excel preview requires file metadata. Please download to view.');
+                setLoading(false);
+            }
         } else if (isPPTX) {
             // PowerPoint file - show metadata and download option
             // Full PPTX rendering requires complex libraries, so we show basic info
