@@ -49,7 +49,7 @@ read_input() {
     local prompt="$1"
     local var_name="$2"
     local default="$3"
-    
+
     echo -en "$prompt"
     if [ -t 0 ]; then
         # stdin is a terminal, read normally
@@ -58,7 +58,7 @@ read_input() {
         # stdin is a pipe, read from /dev/tty
         read -r input < /dev/tty
     fi
-    
+
     if [ -n "$input" ]; then
         eval "$var_name=\"$input\""
     elif [ -n "$default" ]; then
@@ -153,6 +153,37 @@ read_input "  Port: " WEB_PORT "8080"
 echo -e "  ${CYAN}API port (default: 3000):${NC}"
 read_input "  Port: " API_PORT "3000"
 
+# Ask about deployment type (local vs VPS)
+echo ""
+echo -e "  ${CYAN}Are you installing on a VPS/remote server? (y/N):${NC}"
+read_input "  VPS: " IS_VPS "n"
+
+HOST_ADDRESS="localhost"
+SETUP_NGINX="n"
+
+if [[ "$IS_VPS" =~ ^[Yy]$ ]]; then
+    # Try to detect public IP
+    DETECTED_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 icanhazip.com 2>/dev/null || echo "")
+
+    if [ -n "$DETECTED_IP" ]; then
+        echo -e "  ${GREEN}✓${NC} Detected public IP: ${DETECTED_IP}"
+        echo -e "  ${CYAN}Enter your domain or IP (default: ${DETECTED_IP}):${NC}"
+        read_input "  Host: " HOST_ADDRESS "$DETECTED_IP"
+    else
+        echo -e "  ${CYAN}Enter your domain or server IP:${NC}"
+        read_input "  Host: " HOST_ADDRESS ""
+        if [ -z "$HOST_ADDRESS" ]; then
+            echo -e "  ${RED}✗${NC} Host address is required for VPS installation"
+            exit 1
+        fi
+    fi
+
+    # Ask about nginx setup
+    echo ""
+    echo -e "  ${CYAN}Would you like to set up nginx as a reverse proxy? (Y/n):${NC}"
+    read_input "  Setup nginx: " SETUP_NGINX "y"
+fi
+
 # Create .env file
 {
     echo "# ClovaLink Configuration"
@@ -196,6 +227,91 @@ if [ "$API_PORT" != "3000" ]; then
 fi
 rm -f compose.yml.bak 2>/dev/null
 
+# Setup nginx if requested
+if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo -e "  ${CYAN}Setting up nginx reverse proxy...${NC}"
+
+    # Check if nginx is installed
+    if ! check_command nginx; then
+        echo -e "  ${YELLOW}Installing nginx...${NC}"
+        if check_command apt-get; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq nginx > /dev/null 2>&1
+        elif check_command yum; then
+            sudo yum install -y -q nginx > /dev/null 2>&1
+        elif check_command dnf; then
+            sudo dnf install -y -q nginx > /dev/null 2>&1
+        else
+            echo -e "  ${RED}✗${NC} Could not install nginx automatically. Please install it manually."
+            SETUP_NGINX="n"
+        fi
+    fi
+
+    if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]] && check_command nginx; then
+        # Create nginx config
+        NGINX_CONF="/etc/nginx/sites-available/clovalink"
+        NGINX_CONF_ENABLED="/etc/nginx/sites-enabled/clovalink"
+
+        # Check if sites-available exists, otherwise use conf.d
+        if [ ! -d "/etc/nginx/sites-available" ]; then
+            NGINX_CONF="/etc/nginx/conf.d/clovalink.conf"
+            NGINX_CONF_ENABLED=""
+        fi
+
+        sudo tee "$NGINX_CONF" > /dev/null << NGINX_EOF
+server {
+    listen 80;
+    server_name ${HOST_ADDRESS};
+
+    # Web interface
+    location / {
+        proxy_pass http://127.0.0.1:${WEB_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+
+    # API endpoint
+    location /api {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        client_max_body_size 100M;
+    }
+
+    # File uploads - increase body size limit
+    client_max_body_size 100M;
+}
+NGINX_EOF
+
+        # Enable site if using sites-available/sites-enabled pattern
+        if [ -n "$NGINX_CONF_ENABLED" ]; then
+            sudo ln -sf "$NGINX_CONF" "$NGINX_CONF_ENABLED"
+            # Remove default site if it exists
+            sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+        fi
+
+        # Test and reload nginx
+        if sudo nginx -t > /dev/null 2>&1; then
+            sudo systemctl reload nginx 2>/dev/null || sudo nginx -s reload 2>/dev/null || true
+            echo -e "  ${GREEN}✓${NC} Nginx configured and reloaded"
+        else
+            echo -e "  ${RED}✗${NC} Nginx configuration test failed. Please check manually."
+        fi
+    fi
+fi
+
 # Step 5: Start services
 echo ""
 echo -e "${BLUE}[5/5]${NC} Starting ClovaLink..."
@@ -219,8 +335,18 @@ if $COMPOSE_CMD ps | grep -q "Up\|running"; then
     echo -e "${GREEN}║${NC}                                                               ${GREEN}║${NC}"
     echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "  ${BOLD}Web Interface:${NC}  ${CYAN}http://localhost:${WEB_PORT}${NC}"
-    echo -e "  ${BOLD}API Endpoint:${NC}   ${CYAN}http://localhost:${API_PORT}${NC}"
+
+    # Display appropriate URLs based on setup type
+    if [[ "$SETUP_NGINX" =~ ^[Yy]$ ]]; then
+        echo -e "  ${BOLD}Web Interface:${NC}  ${CYAN}http://${HOST_ADDRESS}${NC}"
+        echo -e "  ${BOLD}API Endpoint:${NC}   ${CYAN}http://${HOST_ADDRESS}/api${NC}"
+    elif [ "$HOST_ADDRESS" != "localhost" ]; then
+        echo -e "  ${BOLD}Web Interface:${NC}  ${CYAN}http://${HOST_ADDRESS}:${WEB_PORT}${NC}"
+        echo -e "  ${BOLD}API Endpoint:${NC}   ${CYAN}http://${HOST_ADDRESS}:${API_PORT}${NC}"
+    else
+        echo -e "  ${BOLD}Web Interface:${NC}  ${CYAN}http://localhost:${WEB_PORT}${NC}"
+        echo -e "  ${BOLD}API Endpoint:${NC}   ${CYAN}http://localhost:${API_PORT}${NC}"
+    fi
     echo ""
     echo -e "  ${BOLD}Default Login:${NC}"
     echo -e "    Email:    ${CYAN}superadmin@clovalink.com${NC}"
