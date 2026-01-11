@@ -1,14 +1,15 @@
 # ClovaLink Docker Compose Configuration
 # Run with: docker compose up -d
+#
+# Pre-built images are used by default (no compilation required).
+# To build from source instead, use:
+#   docker compose -f compose.yml -f compose.build.yml up -d --build
 
 services:
   backend:
-    build:
-      context: ../backend
-      dockerfile: ../infra/Dockerfile.backend
-      network: host
-      args:
-        DATABASE_URL: postgres://postgres:password@localhost:5433/clovalink
+    image: ghcr.io/clovalink/clovalink-backend:latest
+    # Alternative: Docker Hub
+    # image: clovalink/clovalink-backend:latest
     ports:
       - "3000:3000"
     env_file:
@@ -72,9 +73,9 @@ services:
       - uploads_data:/app/uploads
 
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: ../infra/Dockerfile.frontend
+    image: ghcr.io/clovalink/clovalink-frontend:latest
+    # Alternative: Docker Hub
+    # image: clovalink/clovalink-frontend:latest
     ports:
       - "8080:80"
     depends_on:

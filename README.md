@@ -234,10 +234,12 @@ Real-time monitoring for unusual activity patterns:
 
 ### One-Command Setup
 
+Pre-built images are pulled automatically — **no compilation required**.
+
 ```bash
 # Clone and start
-git clone https://github.com/your-org/clovalink.git
-cd clovalink/infra
+git clone https://github.com/ClovaLink/ClovaLink.git
+cd ClovaLink/infra
 docker compose up -d
 ```
 
@@ -245,8 +247,45 @@ docker compose up -d
 <summary><b>Using Podman?</b></summary>
 
 ```bash
-podman compose up -d
+podman-compose up -d
 ```
+
+</details>
+
+<details>
+<summary><b>Building from Source (Developers)</b></summary>
+
+If you want to build locally instead of using pre-built images:
+
+```bash
+# Requires 8GB+ RAM for Rust compilation
+docker compose -f compose.yml -f compose.build.yml up -d --build
+```
+
+For low-memory systems (2-4GB RAM), limit parallel jobs:
+```bash
+# Edit infra/compose.build.yml and set CARGO_BUILD_JOBS: 1
+# Or add swap space before building
+```
+
+</details>
+
+<details>
+<summary><b>Alternative Container Registries</b></summary>
+
+Images are published to both GHCR and Docker Hub:
+
+```yaml
+# GitHub Container Registry (default)
+image: ghcr.io/clovalink/clovalink-backend:latest
+image: ghcr.io/clovalink/clovalink-frontend:latest
+
+# Docker Hub
+image: clovalink/clovalink-backend:latest
+image: clovalink/clovalink-frontend:latest
+```
+
+Edit `infra/compose.yml` to switch registries if needed.
 
 </details>
 

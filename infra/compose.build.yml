@@ -1,0 +1,25 @@
+# ClovaLink Local Build Override
+# Use with: docker compose -f compose.yml -f compose.build.yml up -d --build
+# Or with Podman: podman-compose -f compose.yml -f compose.build.yml up -d --build
+#
+# This file overrides the pre-built images with local builds.
+# Requires significant RAM (8GB+ recommended) for Rust compilation.
+# For low-memory systems, use the pre-built images instead.
+
+services:
+  backend:
+    image: clovalink-backend:local
+    build:
+      context: ../backend
+      dockerfile: ../infra/Dockerfile.backend
+      network: host
+      args:
+        DATABASE_URL: postgres://postgres:password@localhost:5433/clovalink
+        # Reduce parallel jobs for low-memory systems (default: number of CPUs)
+        # CARGO_BUILD_JOBS: 1
+
+  frontend:
+    image: clovalink-frontend:local
+    build:
+      context: ../frontend
+      dockerfile: ../infra/Dockerfile.frontend
