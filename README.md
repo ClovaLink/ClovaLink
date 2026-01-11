@@ -227,7 +227,31 @@ Real-time monitoring for unusual activity patterns:
 
 ## Quick Start
 
-### Step 1: Install Docker
+### One-Line Install (Recommended)
+
+Run this single command to install ClovaLink:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash
+```
+
+The installer will:
+- Check if Docker is installed
+- Download the configuration files
+- Generate secure secrets automatically
+- Start all services
+- Show you the login URL
+
+That's it! Follow the prompts and you'll be running in minutes.
+
+---
+
+### Manual Installation
+
+<details>
+<summary><b>Click here for step-by-step manual setup</b></summary>
+
+#### Step 1: Install Docker
 
 If you don't have Docker installed yet:
 
@@ -353,6 +377,8 @@ Then log out and log back in.
 <summary><b>Using Podman instead of Docker?</b></summary>
 
 Replace `docker compose` with `podman-compose` in all commands.
+
+</details>
 
 </details>
 
