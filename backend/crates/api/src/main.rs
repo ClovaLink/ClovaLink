@@ -6,7 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use clovalink_storage::{S3Storage, LocalStorage, Storage};
+use clovalink_storage::{S3Storage, LocalStorage, EncryptedLocalStorage, Storage};
 use clovalink_extensions::routes::ExtensionState;
 use clovalink_core::cache::Cache;
 use sqlx::postgres::PgPoolOptions;
@@ -98,11 +98,32 @@ async fn main() {
 
     // Initialize Storage
     let storage_type = std::env::var("STORAGE_TYPE").unwrap_or_else(|_| "local".to_string());
+    let encryption_key = std::env::var("ENCRYPTION_KEY").ok();
+    
     let storage: Arc<dyn Storage> = if storage_type == "s3" {
         let bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "clovalink-bucket".to_string());
+        if encryption_key.is_some() {
+            tracing::info!("S3 storage uses provider-side encryption (ENCRYPTION_KEY ignored for S3)");
+        }
         Arc::new(S3Storage::new(bucket).await)
     } else {
-        Arc::new(LocalStorage::new("uploads"))
+        // Local storage - optionally enable ChaCha20-Poly1305 encryption
+        if let Some(ref key_base64) = encryption_key {
+            match EncryptedLocalStorage::from_base64_key("uploads", key_base64) {
+                Ok(encrypted_storage) => {
+                    tracing::info!("Local storage encryption ENABLED (ChaCha20-Poly1305)");
+                    Arc::new(encrypted_storage)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize encrypted storage: {}. Falling back to unencrypted.", e);
+                    tracing::warn!("ENCRYPTION_KEY is set but invalid - files will NOT be encrypted!");
+                    Arc::new(LocalStorage::new("uploads"))
+                }
+            }
+        } else {
+            tracing::info!("Local storage encryption DISABLED (set ENCRYPTION_KEY to enable)");
+            Arc::new(LocalStorage::new("uploads"))
+        }
     };
 
     // Initialize Redis URL

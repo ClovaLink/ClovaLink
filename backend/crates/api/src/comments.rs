@@ -22,6 +22,7 @@ use crate::handlers::can_access_file;
 // ==================== Models ====================
 
 #[derive(Debug, Serialize, FromRow)]
+#[allow(dead_code)]
 pub struct FileComment {
     pub id: Uuid,
     pub file_id: Uuid,
@@ -52,12 +53,14 @@ pub struct CommentWithUser {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct CreateCommentInput {
     pub content: String,
     pub parent_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UpdateCommentInput {
     pub content: String,
 }

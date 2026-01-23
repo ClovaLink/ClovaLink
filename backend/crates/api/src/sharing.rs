@@ -47,6 +47,7 @@ pub struct SharedFile {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ShareableUsersQuery {
     pub search: Option<String>,
     pub department_id: Option<String>,

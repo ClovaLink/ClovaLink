@@ -63,6 +63,11 @@ services:
       - CLAMAV_WORKERS=4
       - CLAMAV_MAX_FILE_SIZE_MB=100
       - CLAMAV_MAX_QUEUE_SIZE=10000  # Backpressure: max pending scan jobs (0=unlimited)
+      # Local Storage Encryption (ChaCha20-Poly1305)
+      # Generate key with: openssl rand -base64 32
+      # Only applies to local storage (S3 uses provider-side encryption)
+      # WARNING: Keep this key safe! Losing it means losing access to encrypted files.
+      # - ENCRYPTION_KEY=your-base64-encoded-32-byte-key
     depends_on:
       - postgres
       - redis

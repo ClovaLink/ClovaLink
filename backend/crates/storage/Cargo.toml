@@ -1,6 +1,6 @@
 [package]
 name = "clovalink_storage"
-version = "0.1.0"
+version = "0.1.3"
 edition = "2021"
 
 [dependencies]
@@ -13,3 +13,9 @@ thiserror = "2"
 futures = "0.3"
 bytes = "1"
 pin-project-lite = "0.2"
+
+# Encryption (ChaCha20-Poly1305 for local storage at-rest encryption)
+chacha20poly1305 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+tracing = "0.1"

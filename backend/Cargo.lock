@@ -18,6 +18,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aead"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
+dependencies = [
+ "crypto-common",
+ "generic-array",
+]
+
+[[package]]
 name = "aes"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -885,6 +895,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chacha20"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818"
+dependencies = [
+ "cfg-if",
+ "cipher",
+ "cpufeatures",
+]
+
+[[package]]
+name = "chacha20poly1305"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35"
+dependencies = [
+ "aead",
+ "chacha20",
+ "cipher",
+ "poly1305",
+ "zeroize",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -916,11 +950,12 @@ checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common",
  "inout",
+ "zeroize",
 ]
 
 [[package]]
 name = "clovalink_ai"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -939,7 +974,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_api"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "argon2",
  "async-trait",
@@ -986,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_auth"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "axum",
  "chrono",
@@ -1004,7 +1039,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_core"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -1026,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_extensions"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "axum",
@@ -1053,17 +1088,21 @@ dependencies = [
 
 [[package]]
 name = "clovalink_storage"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "aws-config",
  "aws-sdk-s3",
+ "base64 0.22.1",
  "bytes",
+ "chacha20poly1305",
  "futures",
  "pin-project-lite",
+ "rand 0.8.5",
  "thiserror 2.0.17",
  "tokio",
  "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -1246,6 +1285,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
  "generic-array",
+ "rand_core 0.6.4",
  "typenum",
 ]
 
@@ -2852,6 +2892,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
+name = "opaque-debug"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
 name = "openssl"
 version = "0.10.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3062,6 +3108,17 @@ dependencies = [
  "fdeflate",
  "flate2",
  "miniz_oxide",
+]
+
+[[package]]
+name = "poly1305"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf"
+dependencies = [
+ "cpufeatures",
+ "opaque-debug",
+ "universal-hash",
 ]
 
 [[package]]
@@ -4720,6 +4777,16 @@ name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+
+[[package]]
+name = "universal-hash"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
+dependencies = [
+ "crypto-common",
+ "subtle",
+]
 
 [[package]]
 name = "untrusted"

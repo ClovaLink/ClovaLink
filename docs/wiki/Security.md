@@ -473,11 +473,39 @@ For compliance, schedule regular exports to external storage.
 
 ### File Encryption
 
-Files at rest:
-- S3: Server-side encryption (SSE-S3 or SSE-KMS)
-- Local: OS-level encryption recommended
+#### Files at Rest
 
-Files in transit:
+**S3 Storage:**
+- Server-side encryption (SSE-S3 or SSE-KMS)
+- Managed by your S3 provider
+
+**Local Storage (v0.1.3+):**
+- Optional ChaCha20-Poly1305 authenticated encryption
+- Enable by setting `ENCRYPTION_KEY` environment variable
+- Each file uses a unique random 12-byte nonce
+- AEAD provides both confidentiality and integrity
+
+```bash
+# Generate a secure 32-byte encryption key
+openssl rand -base64 32
+
+# Set in your .env or environment
+ENCRYPTION_KEY=K7gNU3sdo+OL0wNhqoVWhr3g6s1xYv72ol/pe/Unols=
+```
+
+**Key Management:**
+- Store encryption keys securely (never commit to git)
+- Use secrets managers in production (AWS Secrets Manager, HashiCorp Vault, etc.)
+- Key loss = data loss (no recovery without the key)
+- Key rotation requires re-encrypting all files (not currently automated)
+
+**Backwards Compatibility:**
+- When encryption is enabled, existing unencrypted files remain readable
+- New uploads are encrypted, old files are served as-is
+- No migration required when enabling encryption
+
+#### Files in Transit
+
 - HTTPS/TLS for all API communication
 - Presigned URLs include expiration
 

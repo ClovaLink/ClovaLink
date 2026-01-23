@@ -67,6 +67,7 @@ pub struct OAuthCallbackParams {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UpdatePreferencesInput {
     pub dm_notifications_enabled: Option<bool>,
     pub notify_file_shared: Option<bool>,
@@ -82,6 +83,7 @@ pub struct TenantDiscordSettings {
 
 // Discord API response types
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct DiscordTokenResponse {
     access_token: String,
     token_type: String,
@@ -650,6 +652,7 @@ pub async fn notify_comment(
 }
 
 /// Notify a user about a file request they received (fire-and-forget)
+#[allow(dead_code)]
 pub async fn notify_file_request(
     pool: &sqlx::PgPool,
     tenant_id: Uuid,

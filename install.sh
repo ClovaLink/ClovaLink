@@ -207,6 +207,32 @@ else
     PROTOCOL="http"
 fi
 
+# Ask about local storage encryption
+ENCRYPTION_KEY=""
+echo ""
+echo -e "  ${BOLD}Local Storage Encryption${NC}"
+echo -e "  ClovaLink can encrypt files at rest using ChaCha20-Poly1305."
+echo -e "  ${YELLOW}Note: Only applies to local storage (S3 uses provider encryption).${NC}"
+echo ""
+echo -e "  ${CYAN}Enable local file encryption? (recommended for production) (Y/n):${NC}"
+read_input "  Encrypt: " ENABLE_ENCRYPTION "y"
+
+if [[ "$ENABLE_ENCRYPTION" =~ ^[Yy]$ ]]; then
+    # Generate a secure 32-byte encryption key
+    if command -v openssl &> /dev/null; then
+        ENCRYPTION_KEY=$(openssl rand -base64 32)
+        echo -e "  ${GREEN}✓${NC} Generated secure encryption key"
+        echo ""
+        echo -e "  ${RED}${BOLD}⚠️  IMPORTANT: Save this key securely!${NC}"
+        echo -e "  ${RED}   Losing this key means losing access to all encrypted files.${NC}"
+        echo -e "  ${YELLOW}   Key: ${ENCRYPTION_KEY}${NC}"
+        echo ""
+    else
+        echo -e "  ${YELLOW}⚠${NC} OpenSSL not found, skipping encryption key generation"
+        echo -e "  You can manually set ENCRYPTION_KEY in .env later."
+    fi
+fi
+
 # Create .env file
 {
     echo "# ClovaLink Configuration"
@@ -224,6 +250,14 @@ fi
     echo ""
     echo "# Storage (local by default, configure S3 for production)"
     echo "STORAGE_TYPE=local"
+    echo ""
+    echo "# Local Storage Encryption (ChaCha20-Poly1305)"
+    echo "# Only applies to local storage - S3 uses provider-side encryption"
+    if [ -n "$ENCRYPTION_KEY" ]; then
+        echo "ENCRYPTION_KEY=${ENCRYPTION_KEY}"
+    else
+        echo "# ENCRYPTION_KEY=your-base64-encoded-32-byte-key"
+    fi
     echo ""
     echo "# Optional: S3/Backblaze B2/Wasabi configuration"
     echo "# S3_ENDPOINT=https://s3.us-west-002.backblazeb2.com"

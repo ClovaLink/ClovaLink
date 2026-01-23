@@ -12,6 +12,13 @@ use bytes::Bytes;
 use futures::Stream;
 use tokio_util::io::ReaderStream;
 
+// Encryption imports
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    ChaCha20Poly1305, Nonce,
+};
+use rand::RngCore;
+
 /// A pinned, boxed stream of bytes for zero-copy streaming downloads
 pub type StorageByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>> + Send>>;
 
@@ -468,5 +475,216 @@ impl Storage for LocalStorage {
         } else {
             Err("Local storage path does not exist or is not a directory".into())
         }
+    }
+}
+
+// ============================================================================
+// ENCRYPTED LOCAL STORAGE
+// ============================================================================
+// 
+// Provides transparent ChaCha20-Poly1305 encryption for local file storage.
+// Files are stored as: [12-byte nonce][ciphertext][16-byte auth tag]
+//
+// Features:
+// - Encrypt-on-upload, decrypt-on-download
+// - Backwards compatible: auto-detects and returns plaintext files
+// - Each file uses a unique random nonce (no nonce reuse)
+// - AEAD provides both confidentiality and integrity
+// ============================================================================
+
+/// Nonce size for ChaCha20-Poly1305 (96 bits = 12 bytes)
+const NONCE_SIZE: usize = 12;
+
+/// Encrypted local storage wrapper
+/// 
+/// Wraps LocalStorage and transparently encrypts/decrypts file content using
+/// ChaCha20-Poly1305. The encryption key is provided at construction time.
+pub struct EncryptedLocalStorage {
+    inner: LocalStorage,
+    cipher: ChaCha20Poly1305,
+}
+
+impl EncryptedLocalStorage {
+    /// Create a new encrypted local storage with the given base path and encryption key.
+    /// 
+    /// # Arguments
+    /// * `base_path` - Directory path for file storage
+    /// * `key` - 32-byte encryption key (256 bits)
+    /// 
+    /// # Panics
+    /// Panics if the key is not exactly 32 bytes.
+    pub fn new(base_path: &str, key: &[u8; 32]) -> Self {
+        tracing::info!("Initializing encrypted local storage at: {}", base_path);
+        Self {
+            inner: LocalStorage::new(base_path),
+            cipher: ChaCha20Poly1305::new(key.into()),
+        }
+    }
+    
+    /// Create from a base64-encoded key string.
+    /// 
+    /// # Arguments
+    /// * `base_path` - Directory path for file storage
+    /// * `key_base64` - Base64-encoded 32-byte encryption key
+    /// 
+    /// # Returns
+    /// `Ok(Self)` if the key is valid, `Err` if decoding fails or key size is wrong.
+    pub fn from_base64_key(base_path: &str, key_base64: &str) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        use base64::Engine;
+        let key_bytes = base64::engine::general_purpose::STANDARD
+            .decode(key_base64)
+            .map_err(|e| format!("Invalid base64 encryption key: {}", e))?;
+        
+        if key_bytes.len() != 32 {
+            return Err(format!(
+                "Encryption key must be exactly 32 bytes, got {} bytes", 
+                key_bytes.len()
+            ).into());
+        }
+        
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&key_bytes);
+        
+        Ok(Self::new(base_path, &key))
+    }
+    
+    /// Encrypt data with a random nonce.
+    /// Returns [nonce || ciphertext] where nonce is 12 bytes.
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+        // Generate random nonce
+        let mut nonce_bytes = [0u8; NONCE_SIZE];
+        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        
+        // Encrypt
+        let ciphertext = self.cipher
+            .encrypt(nonce, plaintext)
+            .map_err(|e| format!("Encryption failed: {}", e))?;
+        
+        // Prepend nonce to ciphertext
+        let mut result = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
+        result.extend_from_slice(&nonce_bytes);
+        result.extend(ciphertext);
+        
+        Ok(result)
+    }
+    
+    /// Decrypt data that has nonce prepended.
+    /// Expects [nonce || ciphertext] format.
+    /// 
+    /// Returns the plaintext, or the original data if decryption fails
+    /// (backwards compatibility with unencrypted files).
+    fn decrypt(&self, data: &[u8]) -> Vec<u8> {
+        // Need at least nonce + auth tag (12 + 16 = 28 bytes)
+        if data.len() < NONCE_SIZE + 16 {
+            // Too short to be encrypted, return as-is (plaintext)
+            tracing::debug!("File too short to be encrypted, returning as plaintext");
+            return data.to_vec();
+        }
+        
+        // Extract nonce and ciphertext
+        let nonce = Nonce::from_slice(&data[..NONCE_SIZE]);
+        let ciphertext = &data[NONCE_SIZE..];
+        
+        // Try to decrypt
+        match self.cipher.decrypt(nonce, ciphertext) {
+            Ok(plaintext) => {
+                tracing::debug!("Successfully decrypted file ({} bytes)", plaintext.len());
+                plaintext
+            }
+            Err(_) => {
+                // Decryption failed - probably a plaintext file from before encryption was enabled
+                tracing::debug!("Decryption failed, assuming plaintext file (backwards compatibility)");
+                data.to_vec()
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl Storage for EncryptedLocalStorage {
+    async fn upload(&self, key: &str, data: Vec<u8>) -> Result<String, Box<dyn Error + Send + Sync>> {
+        let encrypted = self.encrypt(&data)?;
+        tracing::debug!(
+            "Encrypting upload: {} -> {} bytes (key: {})",
+            data.len(),
+            encrypted.len(),
+            key
+        );
+        self.inner.upload(key, encrypted).await
+    }
+    
+    async fn upload_from_path(&self, key: &str, path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
+        // Read file, encrypt, then write
+        // (We can't stream-encrypt with AEAD since we need the whole message for auth tag)
+        let data = tokio::fs::read(path).await?;
+        let encrypted = self.encrypt(&data)?;
+        tracing::debug!(
+            "Encrypting upload from path: {} -> {} bytes (key: {})",
+            data.len(),
+            encrypted.len(),
+            key
+        );
+        self.inner.upload(key, encrypted).await
+    }
+
+    async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+        let encrypted = self.inner.download(key).await?;
+        Ok(self.decrypt(&encrypted))
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.inner.delete(key).await
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<FileMetadata>, Box<dyn Error + Send + Sync>> {
+        // List returns metadata only, no decryption needed
+        // Note: file sizes will be encrypted sizes (slightly larger than original)
+        self.inner.list(prefix).await
+    }
+
+    async fn create_folder(&self, key: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.inner.create_folder(key).await
+    }
+
+    async fn rename(&self, from: &str, to: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Rename is just a filesystem operation, encryption is preserved
+        self.inner.rename(from, to).await
+    }
+
+    async fn exists(&self, key: &str) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        self.inner.exists(key).await
+    }
+    
+    async fn presigned_download_url(
+        &self,
+        _key: &str,
+        _expires_in_secs: u64,
+    ) -> Result<Option<String>, Box<dyn Error + Send + Sync>> {
+        // Local storage doesn't support presigned URLs
+        Ok(None)
+    }
+    
+    fn supports_presigned_urls(&self) -> bool {
+        false
+    }
+    
+    async fn download_stream(&self, key: &str) -> Result<(StorageByteStream, u64), Box<dyn Error + Send + Sync>> {
+        // For encrypted storage, we must decrypt the entire file first
+        // (ChaCha20-Poly1305 is an AEAD cipher that needs the full ciphertext for auth)
+        let encrypted = self.inner.download(key).await?;
+        let decrypted = self.decrypt(&encrypted);
+        let size = decrypted.len() as u64;
+        
+        // Create a stream from the decrypted bytes
+        let stream = futures::stream::once(async move {
+            Ok::<Bytes, std::io::Error>(Bytes::from(decrypted))
+        });
+        
+        Ok((Box::pin(stream), size))
+    }
+    
+    async fn health_check(&self) -> Result<u64, Box<dyn Error + Send + Sync>> {
+        self.inner.health_check().await
     }
 }

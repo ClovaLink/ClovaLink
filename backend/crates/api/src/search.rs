@@ -61,12 +61,12 @@ struct FileRow {
 }
 
 #[derive(FromRow)]
+#[allow(dead_code)]
 struct GroupRow {
     id: Uuid,
     name: String,
     description: Option<String>,
     parent_path: Option<String>,
-    #[allow(dead_code)]
     tenant_id: Uuid,
     department_id: Option<Uuid>,
     visibility: String,
