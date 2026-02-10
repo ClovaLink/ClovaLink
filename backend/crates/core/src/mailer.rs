@@ -1,10 +1,11 @@
+use crate::models::Tenant;
 use lettre::{
+    message::{header::ContentType, SinglePart},
     transport::smtp::authentication::Credentials,
     transport::smtp::client::Tls,
     transport::smtp::client::TlsParameters,
-    Message, AsyncTransport,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
-use crate::models::Tenant;
 use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
@@ -40,41 +41,41 @@ pub async fn send_email(
         .from(from.parse()?)
         .to(to.parse()?)
         .subject(subject)
-        .body(body.to_string())?;
+        .singlepart(
+            SinglePart::builder()
+                .header(ContentType::TEXT_HTML)
+                .body(body.to_string()),
+        )?;
 
     let creds = Credentials::new(username.clone(), password.clone());
+    let secure = tenant.smtp_secure.unwrap_or(true);
+    let port_u16 = port as u16;
 
-    // Basic TLS configuration - in production, might need more options based on provider
-    let tls = if tenant.smtp_secure.unwrap_or(true) {
-        Tls::Wrapper(TlsParameters::new(host.clone())?)
+    let mailer: AsyncSmtpTransport<Tokio1Executor> = if port_u16 == 465 && secure {
+        // Port 465: Implicit TLS (TLS wrapping from the start)
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            .port(port_u16)
+            .credentials(creds)
+            .tls(Tls::Wrapper(TlsParameters::new(host.clone())?))
+            .timeout(Some(Duration::from_secs(10)))
+            .build()
+    } else if secure {
+        // Port 587 or other with secure=true: STARTTLS
+        // relay() configures Tls::Required internally
+        AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
+            .port(port_u16)
+            .credentials(creds)
+            .timeout(Some(Duration::from_secs(10)))
+            .build()
     } else {
-        Tls::None
+        // secure=false: No TLS
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            .port(port_u16)
+            .credentials(creds)
+            .tls(Tls::None)
+            .timeout(Some(Duration::from_secs(10)))
+            .build()
     };
-
-
-
-    // Lettre's async support is feature-gated and might require specific runtime setup.
-    // For simplicity in this iteration, we use the synchronous transport in a blocking task if needed,
-    // but here we are using the standard transport which is blocking.
-    // Ideally, we should use AsyncSmtpTransport with Tokio.
-    // Given the Cargo.toml has `tokio1` feature, let's assume we can use async if we change the type.
-    // However, to avoid complexity with async traits in this step, we'll run it blocking for now
-    // or use the async version if available.
-    // Let's stick to the blocking `send` for now wrapped in `spawn_blocking` in the caller if needed,
-    // OR just use it directly as this is a prototype.
-    // Wait, `lettre` 0.11 `SmtpTransport` IS the synchronous one. `AsyncSmtpTransport` is for async.
-    // Let's use `AsyncSmtpTransport` to be proper.
-
-    // Re-implementation with AsyncSmtpTransport
-    use lettre::AsyncSmtpTransport;
-    use lettre::Tokio1Executor;
-
-    let mailer: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
-        .port(port as u16)
-        .credentials(creds)
-        .tls(tls)
-        .timeout(Some(Duration::from_secs(10)))
-        .build();
 
     mailer.send(email).await?;
 
@@ -88,25 +89,34 @@ pub async fn test_smtp_connection(
     password: &str,
     secure: bool,
 ) -> Result<(), MailerError> {
-    use lettre::AsyncSmtpTransport;
-    use lettre::Tokio1Executor;
-
     let creds = Credentials::new(username.to_string(), password.to_string());
-    
-    let tls = if secure {
-        Tls::Wrapper(TlsParameters::new(host.to_string())?)
+    let port_u16 = port as u16;
+
+    let mailer: AsyncSmtpTransport<Tokio1Executor> = if port_u16 == 465 && secure {
+        // Port 465: Implicit TLS
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            .port(port_u16)
+            .credentials(creds)
+            .tls(Tls::Wrapper(TlsParameters::new(host.to_string())?))
+            .timeout(Some(Duration::from_secs(5)))
+            .build()
+    } else if secure {
+        // STARTTLS
+        AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
+            .port(port_u16)
+            .credentials(creds)
+            .timeout(Some(Duration::from_secs(5)))
+            .build()
     } else {
-        Tls::None
+        // No TLS
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+            .port(port_u16)
+            .credentials(creds)
+            .tls(Tls::None)
+            .timeout(Some(Duration::from_secs(5)))
+            .build()
     };
 
-    let mailer: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
-        .port(port as u16)
-        .credentials(creds)
-        .tls(tls)
-        .timeout(Some(Duration::from_secs(5)))
-        .build();
-
-    // Test connection by sending a NOOP
     mailer.test_connection().await?;
 
     Ok(())
