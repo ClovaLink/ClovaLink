@@ -1,5 +1,8 @@
 use serde::{Deserialize, Deserializer, Serialize};
-use sqlx::types::{chrono::{DateTime, Utc}, Uuid};
+use sqlx::types::{
+    chrono::{DateTime, Utc},
+    Uuid,
+};
 
 /// Deserialize an optional UUID that might be an empty string
 /// Empty strings are treated as None
@@ -8,7 +11,7 @@ where
     D: Deserializer<'de>,
 {
     use serde::de::Error;
-    
+
     let opt: Option<String> = Option::deserialize(deserializer)?;
     match opt {
         None => Ok(None),
@@ -150,7 +153,9 @@ pub struct CreateUserInput {
     pub name: String,
     pub password: String,
     pub role: String,
+    #[serde(default, deserialize_with = "deserialize_optional_uuid")]
     pub department_id: Option<Uuid>,
+    #[serde(default, deserialize_with = "deserialize_optional_uuid")]
     pub tenant_id: Option<Uuid>,
     pub allowed_tenant_ids: Option<Vec<Uuid>>,
     pub allowed_department_ids: Option<Vec<Uuid>>,
@@ -180,7 +185,7 @@ pub struct LoginInput {
 
 #[derive(Debug, Deserialize)]
 pub struct SuspendUserInput {
-    pub until: Option<DateTime<Utc>>,  // None = indefinite suspension
+    pub until: Option<DateTime<Utc>>, // None = indefinite suspension
     pub reason: Option<String>,
 }
 
@@ -406,11 +411,7 @@ pub const ALL_PERMISSIONS: &[&str] = &[
 /// Get base permissions for a role level
 pub fn get_base_permissions(base_role: &str) -> Vec<&'static str> {
     match base_role {
-        "Employee" => vec![
-            "files.view",
-            "files.upload",
-            "files.download",
-        ],
+        "Employee" => vec!["files.view", "files.upload", "files.download"],
         "Manager" => vec![
             "files.view",
             "files.upload",
@@ -465,4 +466,3 @@ pub fn get_base_permissions(base_role: &str) -> Vec<&'static str> {
         _ => vec![],
     }
 }
-
