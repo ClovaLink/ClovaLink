@@ -5,6 +5,13 @@ All notable changes to ClovaLink will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3.1] - 2026-02-09
+
+### Fixed
+
+- **SMTP TLS Configuration**: Fixed conflicting TLS modes that caused email delivery failures on most SMTP providers (Gmail, SendGrid, Office365, etc.). Port 465 now correctly uses implicit TLS, port 587 uses STARTTLS, and non-secure connections are handled properly.
+- **HTML Email Rendering**: Emails were being sent with `text/plain` content type despite containing HTML, causing recipients to see raw HTML tags. Emails now use `text/html` content type for proper rendering.
+
 ## [0.1.3] - 2026-01-23
 
 ### Added
