@@ -1,10 +1,10 @@
-import { AlertTriangle, Wrench } from 'lucide-react';
+import { AlertTriangle, LogOut, Wrench } from 'lucide-react';
 import { useGlobalSettings } from '../context/GlobalSettingsContext';
 import { useAuth } from '../context/AuthContext';
 
 export function MaintenanceOverlay() {
     const { settings } = useGlobalSettings();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
 
     // Don't show overlay if:
     // - Maintenance mode is off
@@ -51,6 +51,17 @@ export function MaintenanceOverlay() {
                             <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
                             <span>Maintenance in progress</span>
                         </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="px-8 pt-2 pb-6 flex justify-center">
+                        <button
+                            onClick={logout}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            Log Out
+                        </button>
                     </div>
 
                     {/* Footer */}
