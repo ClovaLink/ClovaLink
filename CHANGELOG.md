@@ -5,6 +5,68 @@ All notable changes to ClovaLink will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-04
+
+### Added
+
+- **OIDC Single Sign-On (SSO)**: Enterprise SSO support via OpenID Connect
+  - Connect Google Workspace, Microsoft Entra ID, Okta, or any OIDC provider
+  - Per-tenant provider configuration with admin UI (Settings → SSO)
+  - Email domain discovery — SSO buttons appear automatically on login page
+  - Account linking — existing users can link SSO from their profile
+  - Auto-provisioning (opt-in) — new users created on first SSO login
+  - Configurable MFA trust — choose whether to require ClovaLink 2FA on top of IdP auth
+  - Passwordless users — create SSO-only accounts with no password
+  - Hybrid auth — users can have both password and SSO enabled
+
+- **SAML 2.0 Single Sign-On**: Enterprise SAML SSO for organizations using ADFS, Okta, Azure AD, and other SAML IdPs
+  - Pure Rust implementation — no C dependencies, no unsafe code, no Dockerfile changes
+  - SP metadata endpoint for easy IdP configuration
+  - HTTP-POST and HTTP-Redirect bindings
+  - RSA-SHA256 and RSA-SHA1 XML signature verification
+  - Assertion replay protection, time window validation, audience restriction
+  - Configurable NameID format, attribute mapping for email/name
+  - Same auto-provision, MFA trust, and account linking features as OIDC
+
+- **IdP Attribute/Claim Mapping**: Map IdP-provided attributes to ClovaLink roles and departments
+  - Works for both OIDC and SAML providers
+  - Map IdP groups, roles, or department attributes to ClovaLink base roles, custom roles, and departments
+  - Priority-based evaluation — first match wins
+  - Exact, contains, and regex match types
+  - Admin UI in Settings → SSO → Attribute Mappings tab
+
+- **Install Script Update Command**: `install.sh --update` for easy in-place upgrades
+  - Backs up .env and compose.yml, pulls latest images, restarts services
+  - One-liner: `curl -fsSL .../install.sh | bash -s -- --update`
+
+### Changed
+
+- `password_hash` column is now nullable (supports SSO-only users)
+- Users table has new `identity_provider` column (`local`, `oidc`, `saml`, `hybrid`)
+- Tenants table has new `auth_methods` column (array of enabled auth methods)
+- Login endpoint returns `sso_required` error for SSO-only users attempting password login
+- Password reset is blocked for SSO-only users (directed to IdP instead)
+- SSO provider management elevated to SuperAdmin (security-critical configuration)
+- SSO Settings page now has tabs: OIDC Providers, SAML Providers, Attribute Mappings
+- Linked Accounts section on Profile shows both OIDC and SAML identities with protocol badge
+
+### Security
+
+- OIDC state/nonce parameters for CSRF and replay protection (10-minute expiry, one-time use)
+- SAML RelayState CSRF protection (10-minute expiry, one-time use)
+- SAML assertion replay protection via consumed assertions table
+- SAML XML signature verification (pure Rust: Exclusive C14N, RSA-SHA256/SHA1)
+- SAML InResponseTo validation against stored AuthnRequest IDs
+- Client secrets encrypted at rest in database
+- Account unlinking blocked if it would lock out the user (no password + last identity)
+- Provider deletion warns about SSO-only users who would lose access
+
+### Notes
+
+- **Backwards compatible**: Existing users default to `identity_provider = 'local'`, tenants default to `auth_methods = ['local']`. No action needed for existing installations.
+- **New env var** (only needed if configuring SSO): `SECRETS_ENCRYPTION_KEY` for encrypting IdP client secrets at rest. OIDC callback and frontend URLs are derived automatically from `BASE_URL`.
+- **Pure Rust SAML**: No system packages or C libraries required. SAML verification uses `rsa`, `x509-cert`, `quick-xml`, and `der` crates.
+
 ## [0.1.3.1] - 2026-02-09
 
 ### Fixed

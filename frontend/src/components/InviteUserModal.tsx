@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Lock, RefreshCw, Eye, EyeOff, User, Shield, Building2, Key, ChevronDown, Check } from 'lucide-react';
+import { X, Lock, RefreshCw, Eye, EyeOff, User, Shield, Building2, Key, ChevronDown, Check, Globe } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuthFetch, useAuth } from '../context/AuthContext';
 import { usePasswordPolicy, validatePassword, PasswordPolicy } from './PasswordInput';
@@ -103,6 +103,7 @@ export interface UserData {
     allowed_tenant_ids?: string[];
     allowed_department_ids?: string[];
     confirm_password?: string;
+    identity_provider?: string;
 }
 
 interface Role {
@@ -145,6 +146,8 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
     const [departmentsByTenant, setDepartmentsByTenant] = useState<Record<string, any[]>>({});
     const [showTempPassword, setShowTempPassword] = useState(false);
     const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+    const [hasSsoProviders, setHasSsoProviders] = useState(false);
+    const [authMethod, setAuthMethod] = useState<'local' | 'oidc' | 'hybrid'>('local');
     
     // Fetch password policy
     const { policy: passwordPolicy } = usePasswordPolicy();
@@ -247,8 +250,10 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
                 });
                 setOriginalRole(null);
             }
+            setAuthMethod('local');
             fetchDepartments();
             fetchRoles();
+            fetchSsoProviders();
             if (isSuperAdmin) {
                 fetchTenants();
             }
@@ -343,6 +348,18 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
         }
     };
 
+    const fetchSsoProviders = async () => {
+        try {
+            const response = await authFetch('/api/oidc/providers');
+            if (response.ok) {
+                const data = await response.json();
+                setHasSsoProviders((data.providers || []).length > 0);
+            }
+        } catch {
+            // SSO not configured — that's fine
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -354,8 +371,8 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
             return;
         }
         
-        // Validate password against policy for new users
-        if (!initialData && formData.password) {
+        // Validate password against policy for new users (skip for SSO-only)
+        if (!initialData && authMethod !== 'oidc' && formData.password) {
             if (passwordPolicy) {
                 const errors = validatePassword(formData.password, passwordPolicy);
                 if (errors.length > 0) {
@@ -374,9 +391,13 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
         setIsSubmitting(true);
 
         try {
-            const submitData = roleChanged 
-                ? { ...formData, confirm_password: confirmPassword }
-                : formData;
+            const baseData = { ...formData, identity_provider: authMethod };
+            if (authMethod === 'oidc') {
+                delete baseData.password;
+            }
+            const submitData = roleChanged
+                ? { ...baseData, confirm_password: confirmPassword }
+                : baseData;
             await onSubmit(submitData);
             setFormData({
                 name: '',
@@ -406,7 +427,7 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
     // Calculate completion states
     const basicComplete = formData.name.length > 0 && formData.email.length > 0;
     const roleComplete = formData.role.length > 0;
-    const credentialsComplete = initialData || (formData.password && formData.password.length >= 8);
+    const credentialsComplete = initialData || authMethod === 'oidc' || (formData.password && formData.password.length >= 8);
     
     // Count additional access items
     const accessCount = (formData.allowed_tenant_ids?.length || 0) + (formData.allowed_department_ids?.length || 0);
@@ -674,6 +695,40 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
                                 completed={credentialsComplete as boolean}
                             >
                                 <div className="space-y-3">
+                                    {/* Auth Method Selector (only show if SSO providers exist) */}
+                                    {hasSsoProviders && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                                                Authentication Method
+                                            </label>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {(['local', 'oidc', 'hybrid'] as const).map((method) => (
+                                                    <button
+                                                        key={method}
+                                                        type="button"
+                                                        onClick={() => setAuthMethod(method)}
+                                                        className={clsx(
+                                                            'px-3 py-2 text-xs font-medium rounded-lg border transition-colors',
+                                                            authMethod === method
+                                                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+                                                                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                                        )}
+                                                    >
+                                                        {method === 'local' && <><Key className="w-3 h-3 inline mr-1" />Password</>}
+                                                        {method === 'oidc' && <><Globe className="w-3 h-3 inline mr-1" />SSO Only</>}
+                                                        {method === 'hybrid' && <><Shield className="w-3 h-3 inline mr-1" />Both</>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {authMethod === 'oidc' && (
+                                                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                                    User will sign in via SSO only. No password needed.
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {authMethod !== 'oidc' && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                             Temporary Password
@@ -767,6 +822,7 @@ export function InviteUserModal({ isOpen, onClose, onSubmit, initialData, target
                                             User will be prompted to change this on first login
                                         </p>
                                     </div>
+                                    )}
                                 </div>
                             </AccordionSection>
                         )}

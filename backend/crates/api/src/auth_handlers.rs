@@ -108,14 +108,47 @@ pub async fn login(
         }
     }
 
+    // Check if this user requires SSO login (no password set, or SSO-only)
+    if user.identity_provider == "oidc" || user.identity_provider == "saml" || user.password_hash.is_none() || user.password_hash.as_deref() == Some("") {
+        let oidc_providers: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "SELECT id, name, slug FROM tenant_oidc_providers WHERE tenant_id = $1 AND enabled = true"
+        )
+        .bind(user.tenant_id)
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+
+        let saml_providers: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "SELECT id, name, slug FROM tenant_saml_providers WHERE tenant_id = $1 AND enabled = true"
+        )
+        .bind(user.tenant_id)
+        .fetch_all(&state.pool)
+        .await
+        .unwrap_or_default();
+
+        let mut provider_list: Vec<serde_json::Value> = oidc_providers
+            .iter()
+            .map(|(id, name, slug)| json!({"id": id, "name": name, "slug": slug, "protocol": "oidc"}))
+            .collect();
+        for (id, name, slug) in &saml_providers {
+            provider_list.push(json!({"id": id, "name": name, "slug": slug, "protocol": "saml"}));
+        }
+
+        return Ok(Json(json!({
+            "error": "sso_required",
+            "message": "This account uses Single Sign-On. Please sign in with your identity provider.",
+            "providers": provider_list,
+        })));
+    }
+
     // Verify password using Argon2 with tuned parameters
     let argon2 = get_argon2();
-    let parsed_hash = PasswordHash::new(&user.password_hash)
+    let parsed_hash = PasswordHash::new(user.password_hash.as_deref().unwrap_or(""))
         .map_err(|e| {
             tracing::error!("Failed to parse password hash: {:?}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-    
+
     let password_valid = argon2.verify_password(input.password.as_bytes(), &parsed_hash).is_ok();
 
     if !password_valid {
@@ -539,7 +572,8 @@ pub async fn register(
     
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = get_argon2();
-    let password_hash = argon2.hash_password(input.password.as_bytes(), &salt)
+    let password = input.password.ok_or(StatusCode::BAD_REQUEST)?;
+    let password_hash = argon2.hash_password(password.as_bytes(), &salt)
         .map_err(|e| {
             tracing::error!("Failed to hash password: {:?}", e);
             StatusCode::INTERNAL_SERVER_ERROR

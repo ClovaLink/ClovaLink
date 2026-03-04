@@ -36,6 +36,12 @@ mod virus_scan;
 mod ai;
 mod text_extract;
 mod discord;
+mod oidc;
+mod saml;
+mod saml_crypto;
+mod saml_xml;
+mod sso_common;
+mod sso_mappings;
 mod comments;
 mod sharing;
 mod groups;
@@ -402,6 +408,14 @@ async fn main() {
         // File sharing public endpoints
         .route("/api/share/{token}", get(handlers::download_shared_file))
         .route("/api/share/{token}/info", get(handlers::get_share_info))
+        // OIDC SSO public endpoints
+        .route("/api/auth/oidc/providers", get(oidc::discover_providers))
+        .route("/api/auth/oidc/authorize/{provider_id}", get(oidc::start_oidc_auth))
+        .route("/api/auth/oidc/callback", get(oidc::oidc_callback))
+        // SAML SSO public endpoints
+        .route("/api/auth/saml/metadata/{provider_id}", get(saml::sp_metadata))
+        .route("/api/auth/saml/authorize/{provider_id}", get(saml::start_saml_auth))
+        .route("/api/auth/saml/acs", post(saml::saml_acs))
         .layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             middleware::rate_limit::rate_limit_public,
@@ -694,7 +708,47 @@ async fn main() {
         .route("/api/discord/disconnect", post(discord::disconnect))
         .route("/api/discord/preferences", post(discord::update_preferences))
         .route("/api/discord/test", post(discord::test_connection))
-        
+
+        // OIDC SSO Provider Management (SuperAdmin)
+        .route("/api/oidc/providers",
+            get(oidc::list_providers)
+            .post(oidc::create_provider)
+        )
+        .route("/api/oidc/providers/{id}",
+            put(oidc::update_provider)
+            .delete(oidc::delete_provider)
+        )
+        .route("/api/oidc/providers/{id}/test", post(oidc::test_provider))
+        // OIDC Account Linking (any authenticated user)
+        .route("/api/auth/oidc/link/{provider_id}", get(oidc::link_oidc_identity))
+        .route("/api/auth/oidc/unlink/{identity_id}", delete(oidc::unlink_oidc_identity))
+        .route("/api/auth/oidc/identities", get(oidc::list_my_identities))
+
+        // SAML SSO Provider Management (SuperAdmin)
+        .route("/api/saml/providers",
+            get(saml::list_providers)
+            .post(saml::create_provider)
+        )
+        .route("/api/saml/providers/{id}",
+            put(saml::update_provider)
+            .delete(saml::delete_provider)
+        )
+        .route("/api/saml/providers/{id}/test", post(saml::test_provider))
+        // SAML Account Linking (any authenticated user)
+        .route("/api/auth/saml/link/{provider_id}", get(saml::link_saml_identity))
+        .route("/api/auth/saml/unlink/{identity_id}", delete(saml::unlink_saml_identity))
+        .route("/api/auth/saml/identities", get(saml::list_my_identities))
+
+        // SSO Attribute Mappings (SuperAdmin, protocol-agnostic)
+        .route("/api/sso/mappings/{protocol}/{provider_id}",
+            get(sso_mappings::list_mappings)
+            .post(sso_mappings::create_mapping)
+        )
+        .route("/api/sso/mappings/{mapping_id}",
+            put(sso_mappings::update_mapping)
+            .delete(sso_mappings::delete_mapping)
+        )
+
         // SECURITY: Use auth_middleware_with_db to check user suspension status on every request
         .layer(axum::middleware::from_fn_with_state(
             app_state.pool.clone(),

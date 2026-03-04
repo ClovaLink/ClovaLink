@@ -5,6 +5,8 @@ import { ProtectedRoute, AdminRoute, SuperAdminRoute, RoleProtectedRoute, Permis
 
 // Eagerly load critical path components
 import { Login } from './pages/Login';
+import { OidcCallback } from './pages/OidcCallback';
+import { SsoCallback } from './pages/SsoCallback';
 import { PublicUpload } from './pages/PublicUpload';
 import { PublicDownload } from './pages/PublicDownload';
 
@@ -40,6 +42,7 @@ const AdminSettings = lazy(() => import('./pages/settings').then(m => ({ default
 const EmailTemplatesSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.EmailTemplatesSettings })));
 const KeyboardShortcutsSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.KeyboardShortcutsSettings })));
 const VirusScanSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.VirusScanSettings })));
+const SsoSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.SsoSettings })));
 
 import { AuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
@@ -80,6 +83,8 @@ function App() {
                                         <Suspense fallback={<PageLoader />}>
                                             <Routes>
                                             <Route path="/login" element={<Login />} />
+                                            <Route path="/auth/oidc/complete" element={<OidcCallback />} />
+                                            <Route path="/auth/sso/complete" element={<SsoCallback />} />
                                             <Route path="/upload/:token" element={<PublicUpload />} />
                                             <Route path="/share/:token" element={<PublicDownload />} />
                                             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -107,6 +112,7 @@ function App() {
                                                     <Route path="shortcuts" element={<KeyboardShortcutsSettings />} />
                                                     <Route path="system" element={<SystemSettings />} />
                                                     <Route path="virus-scan" element={<VirusScanSettings />} />
+                                                    <Route path="sso" element={<SsoSettings />} />
                                                     <Route path="admin" element={<AdminSettings />} />
                                                 </Route>
                                                 

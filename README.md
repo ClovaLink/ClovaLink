@@ -135,6 +135,7 @@ Most small businesses need 80% of enterprise features at 10% of the cost. **Clov
 - HIPAA, SOX, GDPR modes
 - Role-based access control
 - Two-factor authentication (TOTP)
+- OIDC & SAML Single Sign-On (SSO)
 - Immutable audit logs
 - Real-time security alerts
 - Session management
@@ -195,6 +196,18 @@ Most small businesses need 80% of enterprise features at 10% of the cost. **Clov
 - S3 replication for DR
 
 </td>
+<td width="33%" valign="top">
+
+#### Authentication
+- Email/password (default)
+- OIDC SSO (Google, Microsoft, Okta, generic)
+- SAML 2.0 SSO (ADFS, Okta, Azure AD, generic)
+- IdP attribute/claim mapping to roles & departments
+- Per-tenant provider configuration
+- Account linking (password + SSO)
+- Auto-provisioning (opt-in)
+
+</td>
 </tr>
 </table>
 
@@ -243,6 +256,14 @@ The installer will:
 - Show you the login URL
 
 That's it! Follow the prompts and you'll be running in minutes.
+
+#### Updating
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash -s -- --update
+```
+
+This will back up your config, pull the latest images, and restart services. Migrations run automatically.
 
 ---
 
@@ -619,6 +640,25 @@ CLAMAV_PORT=3310
 
 > See [Virus Scanning Documentation](docs/wiki/Virus-Scanning.md) for quarantine, auto-suspend, and monitoring details.
 
+### SSO / OIDC & SAML (Optional)
+
+SSO is configured per-tenant through the admin UI (Settings → SSO). Both OIDC and SAML 2.0 are supported. The following environment variables are only needed if you plan to use SSO:
+
+<details>
+<summary><b>SSO Configuration</b></summary>
+
+```env
+# Required for SSO
+SECRETS_ENCRYPTION_KEY=base64-encoded-32-byte-key   # For encrypting IdP client secrets
+# OIDC callback and frontend URLs are derived from BASE_URL automatically.
+# SAML ACS URL and SP Entity ID are derived from BASE_URL automatically.
+# Make sure BASE_URL is set correctly (the installer does this for you).
+```
+
+</details>
+
+> Provider-specific settings (issuer URL, client ID/secret, IdP certificates, email domains) are configured in the admin UI, not in environment variables. SAML SP metadata is available at `/api/auth/saml/metadata/:provider_id`.
+
 > See [Deployment Guide](docs/wiki/Deployment-Guide.md) for detailed setup instructions.
 
 ---
@@ -694,6 +734,12 @@ CORS_ALLOWED_ORIGINS=https://yourdomain.com
 | POST | `/api/auth/register` | User registration |
 | POST | `/api/public-upload/:token` | File request upload |
 | GET | `/api/public-download/:token` | Shared file download |
+| GET | `/api/auth/oidc/providers?email=` | Discover SSO providers (OIDC + SAML) |
+| GET | `/api/auth/oidc/authorize/:id` | Start OIDC login flow |
+| GET | `/api/auth/oidc/callback` | OIDC callback handler |
+| GET | `/api/auth/saml/metadata/:id` | SAML SP metadata XML |
+| GET | `/api/auth/saml/authorize/:id` | Start SAML login flow |
+| POST | `/api/auth/saml/acs` | SAML Assertion Consumer Service |
 
 ### Protected Endpoints
 
@@ -712,6 +758,9 @@ All require `Authorization: Bearer <token>` header.
 | `/api/audit-logs` | Query with filters, export |
 | `/api/groups` | File groups CRUD, add/remove files |
 | `/api/ai` | Summarization, Q&A, usage stats |
+| `/api/oidc/providers` | OIDC provider CRUD (SuperAdmin) |
+| `/api/saml/providers` | SAML provider CRUD (SuperAdmin) |
+| `/api/sso/mappings` | Attribute mapping CRUD (SuperAdmin) |
 
 > See [backend/README.md](backend/README.md) for complete API documentation.
 
@@ -728,6 +777,8 @@ Security is a core focus of ClovaLink. Key measures include:
 - **Content-Disposition**: Filename sanitization prevents header injection
 - **Zip Slip Prevention**: Path validation on archive extraction
 - **CORS Lockdown**: Explicit origin allowlisting in production
+- **OIDC SSO**: State/nonce CSRF protection, encrypted client secrets, lockout prevention
+- **SAML SSO**: XML signature verification (pure Rust), assertion replay protection, time window validation, audience restriction
 
 > See [Security Documentation](docs/wiki/Security.md) for complete security documentation and hardening guide.
 
@@ -745,6 +796,9 @@ Security is a core focus of ClovaLink. Key measures include:
 - [x] File Groups (virtual collections)
 - [x] Company Folders (org-wide sharing)
 - [x] Office document preview (Excel, PowerPoint)
+- [x] OIDC Single Sign-On (Google, Microsoft, Okta)
+- [x] SAML 2.0 Single Sign-On (ADFS, Azure AD, Okta)
+- [x] IdP attribute/claim mapping (roles & departments)
 - [ ] Mobile apps (iOS/Android)
 - [ ] WebDAV support
 - [ ] Real-time collaboration

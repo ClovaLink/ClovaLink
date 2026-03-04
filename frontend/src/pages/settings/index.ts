@@ -7,3 +7,4 @@ export { AdminSettings } from './AdminSettings';
 export { EmailTemplatesSettings } from './EmailTemplatesSettings';
 export { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
 export { VirusScanSettings } from './VirusScanSettings';
+export { SsoSettings } from './SsoSettings';

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Settings, Image, Shield, ShieldCheck, Building2, ArrowRight, BookOpen, Wrench, Mail, Keyboard } from 'lucide-react';
+import { Settings, Image, Shield, ShieldCheck, Building2, ArrowRight, BookOpen, Wrench, Mail, Keyboard, Globe } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
 
@@ -11,6 +11,7 @@ const TABS = [
     { id: 'shortcuts', label: 'Shortcuts', path: '/settings/shortcuts', icon: Keyboard },
     { id: 'system', label: 'System', path: '/settings/system', icon: Wrench },
     { id: 'virus-scan', label: 'Virus Scan', path: '/settings/virus-scan', icon: ShieldCheck },
+    { id: 'sso', label: 'SSO', path: '/settings/sso', icon: Globe },
     { id: 'admin', label: 'Administration', path: '/settings/admin', icon: Shield },
 ];
 

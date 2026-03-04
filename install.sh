@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# ClovaLink Installer
-# One-line install: curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash
+# ClovaLink Installer & Updater
+# Install:  curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash
+# Update:   curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash -s -- --update
 #
 
 set -e
@@ -14,27 +15,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
-
-# Print banner
-echo ""
-echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
-echo -e "${CYAN}║${NC}   ${BOLD}🍀 ClovaLink Installer${NC}                                      ${CYAN}║${NC}"
-echo -e "${CYAN}║${NC}   Enterprise File Management Made Simple                      ${CYAN}║${NC}"
-echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
-echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
-echo ""
-
-# Function to generate random string
-generate_secret() {
-    if command -v openssl &> /dev/null; then
-        openssl rand -base64 32 | tr -d '/+=' | head -c 32
-    elif [ -f /dev/urandom ]; then
-        cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 32
-    else
-        date +%s%N | sha256sum | head -c 32
-    fi
-}
 
 # Function to check command exists
 check_command() {
@@ -52,10 +32,8 @@ read_input() {
 
     echo -en "$prompt"
     if [ -t 0 ]; then
-        # stdin is a terminal, read normally
         read -r input
     else
-        # stdin is a pipe, read from /dev/tty
         read -r input < /dev/tty
     fi
 
@@ -63,6 +41,160 @@ read_input() {
         eval "$var_name=\"$input\""
     elif [ -n "$default" ]; then
         eval "$var_name=\"$default\""
+    fi
+}
+
+# Detect compose command
+detect_compose() {
+    if check_command docker; then
+        if docker compose version &> /dev/null; then
+            COMPOSE_CMD="docker compose"
+        elif check_command docker-compose; then
+            COMPOSE_CMD="docker-compose"
+        fi
+    elif check_command podman; then
+        if podman compose version &> /dev/null 2>&1; then
+            COMPOSE_CMD="podman compose"
+        elif check_command podman-compose; then
+            COMPOSE_CMD="podman-compose"
+        fi
+    fi
+}
+
+# ==================== UPDATE MODE ====================
+if [ "$1" = "--update" ] || [ "$1" = "update" ]; then
+    echo ""
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}   ${BOLD}🍀 ClovaLink Updater${NC}                                        ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}   Update your existing installation                           ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Detect compose command
+    detect_compose
+    if [ -z "$COMPOSE_CMD" ]; then
+        echo -e "  ${RED}✗${NC} Docker/Podman Compose not found. Cannot update."
+        exit 1
+    fi
+    echo -e "  ${GREEN}✓${NC} Using: ${COMPOSE_CMD}"
+
+    # Find installation directory
+    INSTALL_DIR="${CLOVALINK_DIR:-$HOME/clovalink}"
+    echo ""
+    echo -e "  ${CYAN}Where is ClovaLink installed?${NC}"
+    echo -e "  ${CYAN}Press Enter for default: ${INSTALL_DIR}${NC}"
+    read_input "  Directory: " USER_DIR ""
+    if [ -n "$USER_DIR" ]; then
+        INSTALL_DIR="$USER_DIR"
+    fi
+
+    # Verify it's a ClovaLink installation
+    if [ ! -f "$INSTALL_DIR/compose.yml" ] || [ ! -f "$INSTALL_DIR/.env" ]; then
+        echo -e "  ${RED}✗${NC} Not a ClovaLink installation (missing compose.yml or .env)"
+        echo -e "  ${YELLOW}  Expected files in: ${INSTALL_DIR}${NC}"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+    echo -e "  ${GREEN}✓${NC} Found installation: $INSTALL_DIR"
+
+    # Back up current files
+    echo ""
+    echo -e "${BLUE}[1/4]${NC} Backing up current configuration..."
+    BACKUP_TS=$(date +%Y%m%d%H%M%S)
+    cp .env ".env.backup.${BACKUP_TS}"
+    echo -e "  ${GREEN}✓${NC} Backed up .env → .env.backup.${BACKUP_TS}"
+    cp compose.yml "compose.yml.backup.${BACKUP_TS}"
+    echo -e "  ${GREEN}✓${NC} Backed up compose.yml → compose.yml.backup.${BACKUP_TS}"
+
+    # Download latest compose.yml
+    echo ""
+    echo -e "${BLUE}[2/4]${NC} Downloading latest configuration..."
+    REPO_URL="https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/infra"
+    if curl -fsSL "$REPO_URL/compose.yml" -o compose.yml.new 2>/dev/null; then
+        mv compose.yml.new compose.yml
+        echo -e "  ${GREEN}✓${NC} Updated compose.yml"
+    else
+        echo -e "  ${YELLOW}⚠${NC}  Could not download latest compose.yml, keeping current version"
+        rm -f compose.yml.new
+    fi
+
+    # Pull latest images
+    echo ""
+    echo -e "${BLUE}[3/4]${NC} Pulling latest images..."
+    echo ""
+    $COMPOSE_CMD pull
+
+    # Restart services
+    echo ""
+    echo -e "${BLUE}[4/4]${NC} Restarting services..."
+    echo ""
+    echo -e "  ${YELLOW}Migrations will run automatically on startup...${NC}"
+    echo ""
+    $COMPOSE_CMD up -d
+
+    # Wait for health check
+    echo ""
+    echo -e "  Waiting for services to start..."
+    sleep 5
+
+    if $COMPOSE_CMD ps | grep -q "Up\|running"; then
+        echo ""
+        echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║${NC}                                                               ${GREEN}║${NC}"
+        echo -e "${GREEN}║${NC}   ${BOLD}🎉 ClovaLink has been updated!${NC}                               ${GREEN}║${NC}"
+        echo -e "${GREEN}║${NC}                                                               ${GREEN}║${NC}"
+        echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${BOLD}Backup files:${NC}"
+        echo -e "    ${CYAN}.env.backup.${BACKUP_TS}${NC}"
+        echo -e "    ${CYAN}compose.yml.backup.${BACKUP_TS}${NC}"
+        echo ""
+        echo -e "  ${BOLD}If something went wrong:${NC}"
+        echo -e "    ${CYAN}cd $INSTALL_DIR${NC}"
+        echo -e "    ${CYAN}cp .env.backup.${BACKUP_TS} .env${NC}"
+        echo -e "    ${CYAN}cp compose.yml.backup.${BACKUP_TS} compose.yml${NC}"
+        echo -e "    ${CYAN}$COMPOSE_CMD up -d${NC}"
+        echo ""
+        echo -e "  ${BOLD}View logs:${NC}  ${CYAN}cd $INSTALL_DIR && $COMPOSE_CMD logs -f${NC}"
+        echo ""
+    else
+        echo ""
+        echo -e "${RED}Update may have failed. Check the logs:${NC}"
+        echo -e "  cd $INSTALL_DIR && $COMPOSE_CMD logs"
+        echo ""
+        echo -e "${YELLOW}To rollback:${NC}"
+        echo -e "  cp .env.backup.${BACKUP_TS} .env"
+        echo -e "  cp compose.yml.backup.${BACKUP_TS} compose.yml"
+        echo -e "  $COMPOSE_CMD up -d"
+        exit 1
+    fi
+
+    exit 0
+fi
+
+# ==================== INSTALL MODE ====================
+
+# Print banner
+echo ""
+echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   ${BOLD}🍀 ClovaLink Installer${NC}                                      ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}   Enterprise File Management Made Simple                      ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}                                                               ${CYAN}║${NC}"
+echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Function to generate random string (install only)
+generate_secret() {
+    if command -v openssl &> /dev/null; then
+        openssl rand -base64 32 | tr -d '/+=' | head -c 32
+    elif [ -f /dev/urandom ]; then
+        cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 32
+    else
+        date +%s%N | sha256sum | head -c 32
     fi
 }
 
@@ -428,7 +560,7 @@ if $COMPOSE_CMD ps | grep -q "Up\|running"; then
     echo -e "  ${BOLD}Useful Commands:${NC}"
     echo -e "    View logs:    ${CYAN}cd $INSTALL_DIR && $COMPOSE_CMD logs -f${NC}"
     echo -e "    Stop:         ${CYAN}cd $INSTALL_DIR && $COMPOSE_CMD down${NC}"
-    echo -e "    Update:       ${CYAN}cd $INSTALL_DIR && $COMPOSE_CMD pull && $COMPOSE_CMD up -d${NC}"
+    echo -e "    Update:       ${CYAN}curl -fsSL https://raw.githubusercontent.com/ClovaLink/ClovaLink/main/install.sh | bash -s -- --update${NC}"
     echo ""
 else
     echo ""

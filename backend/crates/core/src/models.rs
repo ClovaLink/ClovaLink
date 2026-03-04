@@ -51,6 +51,8 @@ pub struct Tenant {
     pub data_export_enabled: Option<bool>,
     // Upload limits
     pub max_upload_size_bytes: Option<i64>,
+    // Auth methods
+    pub auth_methods: Option<Vec<String>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -124,8 +126,9 @@ pub struct User {
     pub email: String,
     pub name: String,
     #[serde(skip_serializing)]
-    pub password_hash: String,
+    pub password_hash: Option<String>,
     pub role: String,
+    pub identity_provider: String,
     pub status: String,
     pub avatar_url: Option<String>,
     pub last_active_at: Option<DateTime<Utc>>,
@@ -151,7 +154,7 @@ pub struct User {
 pub struct CreateUserInput {
     pub email: String,
     pub name: String,
-    pub password: String,
+    pub password: Option<String>,
     pub role: String,
     #[serde(default, deserialize_with = "deserialize_optional_uuid")]
     pub department_id: Option<Uuid>,
@@ -159,6 +162,12 @@ pub struct CreateUserInput {
     pub tenant_id: Option<Uuid>,
     pub allowed_tenant_ids: Option<Vec<Uuid>>,
     pub allowed_department_ids: Option<Vec<Uuid>>,
+    #[serde(default = "default_identity_provider")]
+    pub identity_provider: String,
+}
+
+fn default_identity_provider() -> String {
+    "local".to_string()
 }
 
 #[derive(Debug, Deserialize)]

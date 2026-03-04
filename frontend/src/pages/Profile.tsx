@@ -25,6 +25,7 @@ import { NotificationPreferences } from '../components/NotificationPreferences';
 import { ImageCropModal } from '../components/ImageCropModal';
 import { PasswordInput, usePasswordPolicy, validatePassword } from '../components/PasswordInput';
 import { DiscordConnection } from '../components/DiscordConnection';
+import { OidcLinkedAccounts } from '../components/OidcLinkedAccounts';
 
 interface Session {
     id: string;
@@ -860,6 +861,7 @@ export function Profile() {
             <div className="space-y-4">
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white">Connected Accounts</h2>
                 <DiscordConnection />
+                <OidcLinkedAccounts />
             </div>
 
             {/* Image Crop Modal */}

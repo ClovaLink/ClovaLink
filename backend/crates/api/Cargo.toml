@@ -1,6 +1,6 @@
 [package]
 name = "clovalink_api"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 
 [dependencies]
@@ -29,6 +29,7 @@ redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 futures = "0.3"
 zip = "2.2"
+sha1 = { version = "0.10", features = ["oid"] }
 sha2 = "0.10"
 hex = "0.4"
 ulid = "1.1"
@@ -40,8 +41,19 @@ bytes = "1.5"
 rand = "0.8"
 regex = "1.10"
 reqwest = { version = "0.12", features = ["json"] }
+openidconnect = "4"
 semver = "1.0"
 async-trait = "0.1"
+
+thiserror = "1"
+
+# SAML 2.0 (pure Rust, no C dependencies)
+rsa = { version = "0.9", features = ["sha2"] }
+x509-cert = "0.2"
+der = { version = "0.7", features = ["pem"] }
+pkcs8 = { version = "0.10", features = ["pem"] }
+base64 = "0.22"
+flate2 = "1"
 
 # Text extraction for AI features
 pdf-extract = "0.7"

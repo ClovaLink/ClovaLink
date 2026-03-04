@@ -38,7 +38,7 @@ interface AuthContextType {
     register: (email: string, name: string, password: string, role: string) => Promise<void>;
     logout: () => void;
     switchTenant: (tenantId: string) => Promise<void>;
-    refreshUser: () => Promise<void>;
+    refreshUser: (token?: string) => Promise<void>;
     hasPermission: (permission: string) => boolean;
 }
 
@@ -96,6 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             // Check for account or company suspension - return the error response to be handled by caller
             if (data.error === 'account_suspended' || data.error === 'company_suspended') {
+                return data;
+            }
+
+            // SSO required — user has no password and must use OIDC
+            if (data.error === 'sso_required') {
                 return data;
             }
 

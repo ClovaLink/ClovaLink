@@ -266,21 +266,31 @@ pub async fn create_user(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Validate password against tenant's password policy
-    validate_password_against_policy(&state.pool, tenant_id, &input.password)
-        .await
-        .map_err(|(status, _json)| status)?;
+    // Hash password if provided (not required for SSO-only users)
+    let password_hash: Option<String> = if input.identity_provider == "oidc" || input.identity_provider == "saml" {
+        // SSO-only users don't need a password
+        None
+    } else {
+        let password = input.password.as_deref().ok_or_else(|| {
+            tracing::error!("Password required for local/hybrid auth");
+            StatusCode::BAD_REQUEST
+        })?;
 
-    // Hash password using Argon2 with tuned parameters
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = get_argon2();
-    let password_hash = argon2.hash_password(input.password.as_bytes(), &salt)
-        .map_err(|e| {
-            tracing::error!("Failed to hash password: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?
-        .to_string();
-    
+        // Validate password against tenant's password policy
+        validate_password_against_policy(&state.pool, tenant_id, password)
+            .await
+            .map_err(|(status, _json)| status)?;
+
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = get_argon2();
+        Some(argon2.hash_password(password.as_bytes(), &salt)
+            .map_err(|e| {
+                tracing::error!("Failed to hash password: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .to_string())
+    };
+
     // Determine tenant_id
     let tenant_id = if auth.role == "SuperAdmin" {
         input.tenant_id.unwrap_or(auth.tenant_id)
@@ -291,8 +301,8 @@ pub async fn create_user(
     // Insert user
     let user = sqlx::query_as::<_, User>(
         r#"
-        INSERT INTO users (tenant_id, email, name, password_hash, role, department_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (tenant_id, email, name, password_hash, role, department_id, identity_provider)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
         "#
     )
@@ -302,6 +312,7 @@ pub async fn create_user(
     .bind(&password_hash)
     .bind(&input.role)
     .bind(input.department_id)
+    .bind(&input.identity_provider)
     .fetch_one(&state.pool)
     .await
     .map_err(|e| {
@@ -947,7 +958,8 @@ pub async fn change_password(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
-    let current_hash = user.get::<String, _>("password_hash");
+    let current_hash: Option<String> = user.get("password_hash");
+    let current_hash = current_hash.ok_or(StatusCode::BAD_REQUEST)?; // OIDC-only users can't change password
     let totp_secret: Option<String> = user.get("totp_secret");
 
     // Check if user has 2FA enabled - require TOTP code
