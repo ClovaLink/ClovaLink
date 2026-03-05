@@ -397,7 +397,7 @@ Then log out and log back in.
 <details>
 <summary><b>Using Podman instead of Docker?</b></summary>
 
-Replace `docker compose` with `podman-compose` in all commands.
+Use `podman compose` (built-in plugin) instead of `docker compose` in all commands. If that doesn't work, install `podman-compose` separately.
 
 </details>
 
@@ -901,6 +901,55 @@ docker compose ps redis
 docker compose exec redis redis-cli ping
 # Should return: PONG
 ```
+
+</details>
+
+<details>
+<summary><b>502 Bad Gateway after restarting the backend</b></summary>
+
+Nginx resolves the backend hostname at startup and caches the IP address. If the backend container restarts and gets a new internal IP, the frontend will return 502 errors because it's still trying to reach the old IP.
+
+**Fix:** Restart the frontend container after the backend restarts:
+
+```bash
+docker compose restart frontend
+```
+
+This applies to both Docker and Podman.
+
+</details>
+
+<details>
+<summary><b>Backend crashes with "VersionMismatch"</b></summary>
+
+This happens when a migration SQL file was modified after it was already applied to the database. SQLx stores a checksum for each migration and will refuse to start if it doesn't match.
+
+**Fix:** Update the stored checksum to match the current file:
+
+```bash
+# Generate the new checksum
+sha256sum backend/migrations/003_oidc_sso.sql
+
+# Update it in the database (replace the hash with your output)
+psql $DATABASE_URL -c "UPDATE _sqlx_migrations SET checksum = E'\\x<new_hash>' WHERE version = 3;"
+```
+
+Alternatively, if you're in development and don't mind losing data, you can drop and re-run the migration:
+
+```bash
+psql $DATABASE_URL -c "DELETE FROM _sqlx_migrations WHERE version = 3;"
+# Restart the backend — it will re-apply the migration
+docker compose restart backend
+```
+
+</details>
+
+<details>
+<summary><b>SSO provider not working after creation</b></summary>
+
+SSO providers (OIDC and SAML) default to **disabled** when first created. This is a safety measure so you can finish configuring them before users can attempt login.
+
+**Fix:** Go to **Settings → SSO**, find your provider, and toggle it to **Enabled**.
 
 </details>
 
