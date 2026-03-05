@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT \n                    u.id,\n                    u.name,\n                    u.email,\n                    u.department_id,\n                    d.name as \"department_name?\",\n                    u.role\n                FROM users u\n                LEFT JOIN departments d ON u.department_id = d.id\n                WHERE u.tenant_id = $1 \n                  AND u.id != $2\n                  AND u.status = 'active'\n                  AND u.department_id = ANY($3)\n                ORDER BY u.name\n                LIMIT 50\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "department_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "department_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "role",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0a413641495e9b3b5827a641f398df6c2374e8fd14ea04c39f1a719d095dd726"
+}

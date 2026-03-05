@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE file_requests SET status = 'revoked', updated_at = NOW() WHERE id = $1 AND tenant_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6514e809cfab21d5e0330386c3ceab08d93d77581df6b2d2356eb3798c0ae62"
+}

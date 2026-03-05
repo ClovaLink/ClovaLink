@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, extension_id, tenant_id, name, cron_expression, \n                   next_run_at, last_run_at, last_status, last_error, \n                   enabled, config, created_at, updated_at\n            FROM automation_jobs\n            WHERE enabled = true AND next_run_at <= $1\n            ORDER BY next_run_at ASC\n            LIMIT 10\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "extension_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "cron_expression",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "next_run_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_run_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "05dca41b40865e5aebec17a88c5ee4a2f7cc0ea840c2ec38f9a2ad7399d81009"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT ep.permission\n        FROM extension_permissions ep\n        JOIN extension_installations ei ON ep.installation_id = ei.id\n        WHERE ei.extension_id = $1 \n          AND ei.tenant_id = $2 \n          AND ei.enabled = true\n          AND ep.permission = $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permission",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7751922d82f8d50ca2ae737d55f387d334af92ea44262c0477e393e8e353f050"
+}

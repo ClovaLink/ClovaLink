@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, extension_id, tenant_id, event_type, payload, request_headers,\n               response_status, response_body, duration_ms, error_message, created_at\n        FROM extension_webhook_logs\n        WHERE extension_id = $1 AND tenant_id = $2\n        ORDER BY created_at DESC\n        LIMIT 100\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "extension_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "event_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "payload",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "request_headers",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "response_status",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "response_body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "duration_ms",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "b9719180c9026f5c3797d812f8132351379025740c659ef5e278f6bbcd6c4e77"
+}

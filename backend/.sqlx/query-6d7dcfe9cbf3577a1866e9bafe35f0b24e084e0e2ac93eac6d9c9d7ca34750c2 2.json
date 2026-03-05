@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE automation_jobs\n        SET enabled = $2\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d7dcfe9cbf3577a1866e9bafe35f0b24e084e0e2ac93eac6d9c9d7ca34750c2"
+}

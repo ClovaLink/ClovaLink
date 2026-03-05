@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM extension_permissions\n        WHERE installation_id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15191c311ef2f85d304bc4440700574c2ae2ae1a8757440818bd62f06cc7a13e"
+}

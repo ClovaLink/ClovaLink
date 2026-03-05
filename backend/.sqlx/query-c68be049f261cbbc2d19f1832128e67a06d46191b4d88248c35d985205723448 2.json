@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version, manifest FROM extension_versions WHERE extension_id = $1 AND is_current = true",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "manifest",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c68be049f261cbbc2d19f1832128e67a06d46191b4d88248c35d985205723448"
+}

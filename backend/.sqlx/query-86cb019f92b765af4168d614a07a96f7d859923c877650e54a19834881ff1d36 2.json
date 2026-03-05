@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, extension_id, version, manifest, changelog, is_current, created_at\n        FROM extension_versions\n        WHERE extension_id = $1 AND is_current = true\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "extension_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "manifest",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "changelog",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_current",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "86cb019f92b765af4168d614a07a96f7d859923c877650e54a19834881ff1d36"
+}

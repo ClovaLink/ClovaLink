@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.id, e.tenant_id, e.name, e.slug, e.description, e.extension_type,\n               e.manifest_url, e.webhook_url, e.public_key, e.signature_algorithm,\n               e.status, e.allowed_tenant_ids, e.created_at, e.updated_at\n        FROM extensions e\n        JOIN extension_installations ei ON e.id = ei.extension_id\n        WHERE ei.tenant_id = $1\n          AND ei.enabled = true\n          AND e.status = 'active'\n          AND e.extension_type = 'file_processor'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "extension_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "manifest_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "webhook_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "public_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "signature_algorithm",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 11,
+        "name": "allowed_tenant_ids",
+        "type_info": "UuidArray"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b0516035fa4ea823d059f97ac2984ce080e6805ef26ad4f501286d8815cf2817"
+}

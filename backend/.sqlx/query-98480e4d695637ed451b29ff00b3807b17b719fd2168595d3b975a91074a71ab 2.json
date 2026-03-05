@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO extension_installations (extension_id, tenant_id, version_id, settings, installed_by)\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING id, extension_id, tenant_id, version_id, enabled, settings, installed_by, installed_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "extension_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "version_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "settings",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "installed_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "installed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "98480e4d695637ed451b29ff00b3807b17b719fd2168595d3b975a91074a71ab"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE automation_jobs\n                SET next_run_at = $2\n                WHERE id = $1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "92c838e7e035d0c56b3637dbf512c2f9cc371251a3b4fcb87702c7f8154ad49e"
+}
