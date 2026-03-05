@@ -360,16 +360,18 @@ pub async fn saml_acs(
         }
     }
 
-    // Step 6: Validate InResponseTo
-    if let Some(ref in_response_to) = saml_response.in_response_to {
-        if in_response_to != &authn_request_id {
-            tracing::error!(
-                "InResponseTo mismatch: expected {}, got {}",
-                authn_request_id,
-                in_response_to
-            );
-            return Err((StatusCode::BAD_REQUEST, "InResponseTo mismatch".to_string()));
-        }
+    // Step 6: Validate InResponseTo (REQUIRED — prevents response substitution attacks)
+    let in_response_to = saml_response.in_response_to.as_deref().ok_or_else(|| {
+        tracing::error!("SAML Response missing required InResponseTo attribute");
+        (StatusCode::BAD_REQUEST, "Missing InResponseTo".to_string())
+    })?;
+    if in_response_to != authn_request_id {
+        tracing::error!(
+            "InResponseTo mismatch: expected {}, got {}",
+            authn_request_id,
+            in_response_to
+        );
+        return Err((StatusCode::BAD_REQUEST, "InResponseTo mismatch".to_string()));
     }
 
     // Step 7: Validate time window (60-sec clock skew tolerance)
@@ -401,30 +403,22 @@ pub async fn saml_acs(
         }
     }
 
-    // Step 9: Replay protection — check assertion ID
-    let already_consumed: Option<(String,)> = sqlx::query_as(
-        "SELECT assertion_id FROM saml_consumed_assertions WHERE assertion_id = $1",
-    )
-    .bind(&assertion.id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()))?;
-
-    if already_consumed.is_some() {
-        tracing::error!("Replay detected: assertion {} already consumed", assertion.id);
-        return Err((StatusCode::BAD_REQUEST, "Assertion replay detected".to_string()));
-    }
-
-    // Record consumed assertion
+    // Step 9: Replay protection — atomic insert to prevent race conditions
     let expiry = assertion.not_on_or_after.unwrap_or_else(|| now + chrono::Duration::hours(1));
-    let _ = sqlx::query(
-        "INSERT INTO saml_consumed_assertions (assertion_id, provider_id, consumed_at, not_on_or_after) VALUES ($1, $2, NOW(), $3)",
+    let inserted: Option<(String,)> = sqlx::query_as(
+        "INSERT INTO saml_consumed_assertions (assertion_id, provider_id, consumed_at, not_on_or_after) VALUES ($1, $2, NOW(), $3) ON CONFLICT (assertion_id) DO NOTHING RETURNING assertion_id",
     )
     .bind(&assertion.id)
     .bind(provider_id)
     .bind(expiry)
-    .execute(&state.pool)
-    .await;
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string()))?;
+
+    if inserted.is_none() {
+        tracing::error!("Replay detected: assertion {} already consumed", assertion.id);
+        return Err((StatusCode::BAD_REQUEST, "Assertion replay detected".to_string()));
+    }
 
     // Step 10: Extract user attributes
     let name_id = assertion.name_id.clone();
@@ -493,6 +487,16 @@ pub async fn saml_acs(
             "{}/profile?saml=linked",
             frontend_url,
         )));
+    }
+
+    // SECURITY: Validate assertion issuer matches configured IdP entity ID
+    if assertion.issuer != provider.idp_entity_id {
+        tracing::error!(
+            "Assertion issuer mismatch: expected {}, got {}",
+            provider.idp_entity_id,
+            assertion.issuer
+        );
+        return Err((StatusCode::BAD_REQUEST, "Assertion issuer mismatch".to_string()));
     }
 
     // === Login Flow (via shared SSO logic) ===

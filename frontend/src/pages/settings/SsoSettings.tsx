@@ -210,19 +210,27 @@ function ToggleField({ label, description, value, onChange }: {
     onChange: () => void;
 }) {
     return (
-        <label className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
             </div>
-            <button type="button" onClick={onChange} className="flex-shrink-0 ml-4">
-                {value ? (
-                    <ToggleRight className="w-8 h-8 text-primary-600" />
-                ) : (
-                    <ToggleLeft className="w-8 h-8 text-gray-400" />
+            <button
+                type="button"
+                onClick={onChange}
+                className={clsx(
+                    'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ml-4',
+                    value ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
                 )}
+            >
+                <span
+                    className={clsx(
+                        'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                        value ? 'translate-x-6' : 'translate-x-1'
+                    )}
+                />
             </button>
-        </label>
+        </div>
     );
 }
 

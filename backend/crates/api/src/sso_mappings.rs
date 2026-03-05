@@ -116,9 +116,12 @@ pub async fn create_mapping(
         return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid match_type. Must be: exact, contains, regex"}))));
     }
 
-    // Validate regex if match_type is regex
+    // Validate regex if match_type is regex (with size limit to prevent ReDoS)
     if match_type == "regex" {
-        if let Err(e) = regex::Regex::new(&input.attribute_value) {
+        if let Err(e) = regex::RegexBuilder::new(&input.attribute_value)
+            .size_limit(10_000)
+            .build()
+        {
             return Err((StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid regex: {}", e)}))));
         }
     }
@@ -189,7 +192,10 @@ pub async fn update_mapping(
 
     let attr_value = input.attribute_value.unwrap_or(existing.attribute_value);
     if match_type == "regex" {
-        if let Err(e) = regex::Regex::new(&attr_value) {
+        if let Err(e) = regex::RegexBuilder::new(&attr_value)
+            .size_limit(10_000)
+            .build()
+        {
             return Err((StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid regex: {}", e)}))));
         }
     }

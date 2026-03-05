@@ -635,7 +635,7 @@ pub async fn create_provider(
     .bind(input.provider_type.as_deref().unwrap_or("generic"))
     .bind(&input.issuer_url)
     .bind(&input.client_id)
-    .bind(&input.client_secret) // TODO: encrypt in production
+    .bind(&input.client_secret) // SECURITY TODO: Encrypt at rest using ENCRYPTION_KEY. Requires key mgmt design + migration for existing plaintext values.
     .bind(input.scopes.as_deref().unwrap_or("openid email profile"))
     .bind(input.auto_provision.unwrap_or(false))
     .bind(input.default_role.as_deref().unwrap_or("Employee"))

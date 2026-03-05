@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS tenant_oidc_providers (
     email_domains TEXT[] NOT NULL DEFAULT '{}',
     -- MFA policy
     trust_idp_mfa BOOLEAN NOT NULL DEFAULT true,
-    -- State
-    enabled BOOLEAN NOT NULL DEFAULT true,
+    -- State: providers must be explicitly enabled after configuration
+    enabled BOOLEAN NOT NULL DEFAULT false,
     -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS oidc_oauth_states (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     -- NULL for login flow, set for account linking
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    redirect_after TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes')
 );
@@ -130,8 +129,8 @@ CREATE TABLE IF NOT EXISTS tenant_saml_providers (
     email_domains TEXT[] NOT NULL DEFAULT '{}',
     -- MFA policy
     trust_idp_mfa BOOLEAN NOT NULL DEFAULT true,
-    -- State
-    enabled BOOLEAN NOT NULL DEFAULT true,
+    -- State: providers must be explicitly enabled after configuration
+    enabled BOOLEAN NOT NULL DEFAULT false,
     -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -152,7 +151,6 @@ CREATE TABLE IF NOT EXISTS saml_auth_states (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     -- NULL for login flow, set for account linking
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    redirect_after TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes')
 );
@@ -216,6 +214,7 @@ CREATE TABLE IF NOT EXISTS sso_attribute_mappings (
 
 CREATE INDEX IF NOT EXISTS idx_sso_attr_mappings_provider ON sso_attribute_mappings(protocol, provider_id);
 CREATE INDEX IF NOT EXISTS idx_sso_attr_mappings_tenant ON sso_attribute_mappings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_sso_attr_mappings_query ON sso_attribute_mappings(protocol, provider_id, enabled, priority DESC);
 
 -- ==================== SAML Assertion Replay Protection ====================
 

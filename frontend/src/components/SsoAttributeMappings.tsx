@@ -6,8 +6,6 @@ import {
     X,
     Loader2,
     Check,
-    ToggleLeft,
-    ToggleRight,
     ArrowUpDown,
 } from 'lucide-react';
 import { useAuthFetch } from '../context/AuthContext';
@@ -372,8 +370,17 @@ export function SsoAttributeMappings({ oidcProviders, samlProviders }: Props) {
                                     <button
                                         type="button"
                                         onClick={() => setForm(prev => ({ ...prev, enabled: !prev.enabled }))}
+                                        className={clsx(
+                                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                                            form.enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                                        )}
                                     >
-                                        {form.enabled ? <ToggleRight className="w-6 h-6 text-primary-600" /> : <ToggleLeft className="w-6 h-6 text-gray-400" />}
+                                        <span
+                                            className={clsx(
+                                                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                                form.enabled ? 'translate-x-6' : 'translate-x-1'
+                                            )}
+                                        />
                                     </button>
                                     <span className="text-sm text-gray-700 dark:text-gray-300">Enabled</span>
                                 </label>

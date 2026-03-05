@@ -13,7 +13,6 @@ use rsa::pkcs1::DecodeRsaPublicKey;
 use rsa::pkcs1v15::{Signature, VerifyingKey};
 use rsa::signature::Verifier;
 use rsa::RsaPublicKey;
-use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use x509_cert::Certificate;
 
@@ -56,6 +55,7 @@ struct SignatureInfo {
 }
 
 /// Parse an X.509 PEM certificate and extract the RSA public key.
+/// Also checks certificate validity dates and logs warnings for expired certs.
 pub fn parse_x509_pem(pem: &str) -> Result<RsaPublicKey, SamlCryptoError> {
     // Strip PEM headers and whitespace
     let pem_clean = pem
@@ -70,6 +70,32 @@ pub fn parse_x509_pem(pem: &str) -> Result<RsaPublicKey, SamlCryptoError> {
 
     let cert = Certificate::from_der(&der_bytes)
         .map_err(|e| SamlCryptoError::CertificateError(format!("DER parse: {}", e)))?;
+
+    // SECURITY: Check certificate validity dates (warn on expired certs)
+    let not_after = cert.tbs_certificate.validity.not_after.to_date_time();
+    let not_before = cert.tbs_certificate.validity.not_before.to_date_time();
+    tracing::debug!(
+        "IdP certificate validity: {:?} to {:?}",
+        not_before, not_after
+    );
+    // Compare using der::DateTime's Ord implementation
+    if let Ok(now) = der::DateTime::new(
+        {
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            // Approximate year from unix timestamp
+            (1970 + (secs / 31_536_000)) as u16
+        }, 1, 1, 0, 0, 0,
+    ) {
+        if now > not_after {
+            tracing::warn!(
+                "IdP signing certificate has expired (NotAfter: {:?}). Certificate should be rotated.",
+                not_after
+            );
+        }
+    }
 
     // Extract the SubjectPublicKeyInfo — raw public key bytes (PKCS#1 DER)
     let spki = cert.tbs_certificate.subject_public_key_info;
@@ -98,9 +124,10 @@ pub fn verify_saml_signature(
     let sig_info = extract_signature_info(xml)?;
 
     // Validate Reference URI if we have an expected ID
+    // SECURITY: Reject empty URIs when an expected ID is provided to prevent signature wrapping attacks
     if let Some(id) = expected_id {
         let expected_ref = format!("#{}", id);
-        if sig_info.reference_uri != expected_ref && !sig_info.reference_uri.is_empty() {
+        if sig_info.reference_uri != expected_ref {
             return Err(SamlCryptoError::ReferenceUriMismatch);
         }
     }
@@ -118,16 +145,18 @@ pub fn verify_saml_signature(
     let element_without_sig = remove_signature_element(&referenced_element);
     let c14n_element = exclusive_c14n(&element_without_sig);
 
+    // SECURITY: Only accept SHA-256 digests. SHA-1 is cryptographically broken.
     let computed_digest = match sig_info.digest_algorithm.as_str() {
-        a if a.contains("sha256") || a.contains("SHA256") => {
+        "http://www.w3.org/2001/04/xmlenc#sha256" => {
             let mut hasher = Sha256::new();
             hasher.update(c14n_element.as_bytes());
             hasher.finalize().to_vec()
         }
-        a if a.contains("sha1") || a.contains("SHA1") || a.contains("#sha1") => {
-            let mut hasher = Sha1::new();
-            hasher.update(c14n_element.as_bytes());
-            hasher.finalize().to_vec()
+        a if a.contains("sha1") || a.contains("SHA1") => {
+            tracing::warn!("SHA-1 digest algorithm rejected as insecure: {}", a);
+            return Err(SamlCryptoError::UnsupportedAlgorithm(
+                format!("{} (SHA-1 is not supported — use SHA-256)", a),
+            ));
         }
         other => return Err(SamlCryptoError::UnsupportedAlgorithm(other.to_string())),
     };
@@ -140,18 +169,19 @@ pub fn verify_saml_signature(
     let sig = Signature::try_from(sig_info.signature_bytes.as_slice())
         .map_err(|e| SamlCryptoError::SignatureInvalid(format!("Signature parse: {}", e)))?;
 
+    // SECURITY: Only accept RSA-SHA256 signatures. SHA-1 is cryptographically broken.
     match sig_info.signature_algorithm.as_str() {
-        a if a.contains("sha256") || a.contains("SHA256") => {
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256" => {
             let verifying_key = VerifyingKey::<Sha256>::new(public_key);
             verifying_key
                 .verify(sig_info.signed_info_c14n.as_bytes(), &sig)
                 .map_err(|e| SamlCryptoError::SignatureInvalid(format!("RSA-SHA256: {}", e)))?;
         }
         a if a.contains("sha1") || a.contains("SHA1") || a.contains("#rsa-sha1") => {
-            let verifying_key = VerifyingKey::<Sha1>::new(public_key);
-            verifying_key
-                .verify(sig_info.signed_info_c14n.as_bytes(), &sig)
-                .map_err(|e| SamlCryptoError::SignatureInvalid(format!("RSA-SHA1: {}", e)))?;
+            tracing::warn!("RSA-SHA1 signature algorithm rejected as insecure: {}", a);
+            return Err(SamlCryptoError::UnsupportedAlgorithm(
+                format!("{} (SHA-1 is not supported — use RSA-SHA256)", a),
+            ));
         }
         other => return Err(SamlCryptoError::UnsupportedAlgorithm(other.to_string())),
     }

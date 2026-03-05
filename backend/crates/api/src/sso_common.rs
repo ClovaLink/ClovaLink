@@ -117,7 +117,9 @@ pub async fn apply_attribute_mapping(
                     "exact" => val == &mapping.attribute_value,
                     "contains" => val.contains(&mapping.attribute_value),
                     "regex" => {
-                        regex::Regex::new(&mapping.attribute_value)
+                        regex::RegexBuilder::new(&mapping.attribute_value)
+                            .size_limit(10_000)
+                            .build()
                             .map(|re| re.is_match(val))
                             .unwrap_or(false)
                     }
@@ -209,8 +211,16 @@ pub async fn resolve_sso_user(
     .map_err(db_err)?;
 
     if let Some(user) = email_match {
-        // Auto-link by email match
-        link_sso_identity(pool, &identity, user.id).await;
+        // SECURITY: Log auto-linking events for audit trail
+        tracing::info!(
+            user_id = %user.id,
+            email = %email,
+            protocol = %identity.protocol,
+            provider_id = %identity.provider_id,
+            sso_subject = %identity.subject,
+            "SSO identity auto-linked by email match"
+        );
+        link_sso_identity(pool, identity, user.id).await;
 
         // Update identity_provider to hybrid if currently local
         if user.identity_provider == "local" {
