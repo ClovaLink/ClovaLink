@@ -922,6 +922,84 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 
 ---
 
+## SSO Security
+
+### OIDC Security
+
+ClovaLink's OIDC implementation includes multiple protections:
+
+| Protection | Description |
+|------------|-------------|
+| **State Parameter** | Cryptographically random `state` parameter prevents CSRF attacks during the authorization flow |
+| **Nonce Validation** | A unique `nonce` is bound to each authentication request and verified in the ID token to prevent replay attacks |
+| **PKCE Support** | Proof Key for Code Exchange hardens the authorization code flow against interception |
+| **Token Validation** | ID tokens are validated for issuer, audience, expiration, and signature |
+
+### SAML 2.0 Security
+
+The SAML implementation is built in pure Rust with no C dependencies:
+
+| Protection | Description |
+|------------|-------------|
+| **Signature Verification** | All SAML assertions are verified against the IdP's X.509 certificate using RSA+SHA-256 |
+| **SHA-1 Rejection** | SHA-1 signed assertions are rejected by default to prevent signature forgery via collision attacks |
+| **InResponseTo Validation** | Response correlation ensures each SAML response matches an outstanding authentication request |
+| **Replay Protection** | Assertion IDs are tracked to prevent replayed SAML responses |
+| **Audience Restriction** | Assertions must include the correct SP entity ID in the audience restriction |
+| **Time Window Validation** | `NotBefore` and `NotOnOrAfter` conditions are enforced to limit assertion validity |
+
+### SSO Session Handling
+
+- SSO users receive standard JWT sessions after successful authentication
+- Session fingerprinting applies equally to SSO and password-based sessions
+- Auto-provisioned users inherit the tenant's default role and department settings
+- Attribute mappings allow IdP-driven role and department assignment with validation against tenant-owned values
+
+---
+
+## Document Approval Security
+
+### Tenant Isolation
+
+All approval operations enforce strict tenant isolation:
+
+- Approval policies are scoped to the tenant that created them
+- Documents can only be submitted for approval within the owning tenant
+- Cross-tenant approval requests are rejected at the API layer
+
+### Atomic Operations
+
+Approval state transitions use database transactions to ensure consistency:
+
+- Approve/reject operations are atomic -- partial state changes cannot occur
+- Concurrent approval attempts on the same document are serialized
+- Resubmission resets the approval chain atomically
+
+### Role-Based Access
+
+| Operation | Required Role/Permission |
+|-----------|--------------------------|
+| View pending approvals | `approvals.view` or Manager+ |
+| Approve/Reject documents | Designated approver for the policy |
+| Manage approval policies | `approvals.manage` or Admin+ |
+| Resubmit rejected documents | Document owner |
+
+### Audit Logging
+
+All approval actions are recorded in the audit log:
+
+| Action | Description |
+|--------|-------------|
+| `approval.submitted` | Document submitted for approval |
+| `approval.approved` | Document approved by approver |
+| `approval.rejected` | Document rejected with reason |
+| `approval.resubmitted` | Rejected document resubmitted |
+| `policy.created` | Approval policy created |
+| `policy.updated` | Approval policy modified |
+| `policy.deleted` | Approval policy removed |
+
+---
+
 ## Vulnerability Reporting
 
 If you discover a security vulnerability:

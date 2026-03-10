@@ -966,6 +966,228 @@ Manually trigger an automation job.
 
 ---
 
+## SSO Endpoints
+
+### OIDC
+
+#### Discover OIDC Configuration
+```http
+GET /api/auth/sso/oidc/discover
+```
+Returns the tenant's OIDC provider configuration (client ID, issuer, scopes). Used by the frontend to render SSO login buttons.
+
+#### OIDC Authorize
+```http
+GET /api/auth/sso/oidc/authorize
+```
+Initiates the OIDC authorization code flow. Generates state and nonce parameters, stores them in the session, and redirects the user to the IdP's authorization endpoint.
+
+#### OIDC Callback
+```http
+GET /api/auth/sso/oidc/callback
+```
+Handles the IdP callback after user authentication. Validates the authorization code, exchanges it for tokens, verifies the ID token (including nonce), and creates or resolves the local user via auto-provisioning. Returns a JWT session.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| code | string | Authorization code from IdP |
+| state | string | Anti-CSRF state parameter |
+
+### SAML 2.0
+
+#### SAML Metadata
+```http
+GET /api/auth/sso/saml/metadata
+```
+Returns the SP (Service Provider) metadata XML document. Provide this URL to your IdP during SAML configuration.
+
+#### SAML Authorize
+```http
+GET /api/auth/sso/saml/authorize
+```
+Initiates a SAML authentication request. Generates an AuthnRequest, stores the request ID for InResponseTo validation, and redirects to the IdP's SSO URL.
+
+#### SAML ACS (Assertion Consumer Service)
+```http
+POST /api/auth/sso/saml/acs
+Content-Type: application/x-www-form-urlencoded
+```
+Receives and processes the SAML Response from the IdP. Validates the XML signature, checks InResponseTo correlation, enforces audience restriction and time conditions, and creates or resolves the local user. Returns a JWT session.
+
+**Form Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| SAMLResponse | string | Base64-encoded SAML Response |
+| RelayState | string | Optional relay state for redirect |
+
+### SSO Provider Management (SuperAdmin)
+
+#### List SSO Providers
+```http
+GET /api/settings/sso/providers
+```
+List all configured SSO providers for the tenant.
+
+#### Create SSO Provider
+```http
+POST /api/settings/sso/providers
+```
+Create a new OIDC or SAML provider configuration.
+
+#### Update SSO Provider
+```http
+PUT /api/settings/sso/providers/{id}
+```
+Update an existing SSO provider.
+
+#### Delete SSO Provider
+```http
+DELETE /api/settings/sso/providers/{id}
+```
+Delete an SSO provider. Removes the corresponding auth method from the tenant.
+
+#### Toggle SSO Provider
+```http
+PUT /api/settings/sso/providers/{id}/toggle
+```
+Enable or disable an SSO provider (Admin or SuperAdmin).
+
+### SSO Attribute Mappings
+
+#### List Attribute Mappings
+```http
+GET /api/settings/sso/attribute-mappings
+```
+List attribute mappings for the tenant.
+
+#### Create Attribute Mapping
+```http
+POST /api/settings/sso/attribute-mappings
+```
+Create a new attribute mapping (e.g., map IdP `groups` claim to ClovaLink role).
+
+#### Update Attribute Mapping
+```http
+PUT /api/settings/sso/attribute-mappings/{id}
+```
+Update an attribute mapping.
+
+#### Delete Attribute Mapping
+```http
+DELETE /api/settings/sso/attribute-mappings/{id}
+```
+Delete an attribute mapping.
+
+---
+
+## Document Approval Endpoints
+
+### List Pending Approvals
+```http
+GET /api/approvals/pending
+```
+List documents awaiting the current user's approval.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| page | number | Page number (default: 1) |
+| per_page | number | Items per page (default: 20) |
+| policy_id | string | Filter by approval policy |
+
+### List Approval History
+```http
+GET /api/approvals/history
+```
+List past approval decisions (approved, rejected) visible to the current user.
+
+### Approve Document
+```http
+POST /api/approvals/{id}/approve
+```
+Approve a pending document.
+
+**Request Body:**
+```json
+{
+  "comment": "Looks good, approved for distribution."
+}
+```
+
+### Reject Document
+```http
+POST /api/approvals/{id}/reject
+```
+Reject a pending document with a reason.
+
+**Request Body:**
+```json
+{
+  "reason": "Missing required signatures on page 3."
+}
+```
+
+### Resubmit Document
+```http
+POST /api/approvals/{id}/resubmit
+```
+Resubmit a previously rejected document for approval. Only the document owner can resubmit.
+
+### Send for Approval
+```http
+POST /api/approvals/send
+```
+Manually submit a document for approval under a specific policy.
+
+**Request Body:**
+```json
+{
+  "file_id": "uuid",
+  "policy_id": "uuid",
+  "message": "Please review the updated Q4 report."
+}
+```
+
+### List Approval Policies
+```http
+GET /api/approvals/policies
+```
+List all approval policies for the tenant.
+
+### Create Approval Policy
+```http
+POST /api/approvals/policies
+```
+Create a new approval policy (Admin only).
+
+**Request Body:**
+```json
+{
+  "name": "Finance Review",
+  "approvers": ["user-uuid-1", "user-uuid-2"],
+  "conditions": {
+    "department_ids": ["uuid"],
+    "file_types": ["pdf", "xlsx"]
+  },
+  "notify_on_submit": true
+}
+```
+
+### Update Approval Policy
+```http
+PUT /api/approvals/policies/{id}
+```
+Update an existing approval policy.
+
+### Delete Approval Policy
+```http
+DELETE /api/approvals/policies/{id}
+```
+Delete an approval policy.
+
+---
+
 ## Error Responses
 
 All endpoints return errors in a consistent format:

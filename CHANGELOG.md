@@ -5,6 +5,52 @@ All notable changes to ClovaLink will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-03-10
+
+### Added
+
+- **Document Approval Workflow**: Configurable approval policies for document uploads
+  - Per-tenant toggle to enable/disable the workflow (`approval_workflow_enabled`)
+  - 7 policy scope types: `all`, `department`, `company_folder`, `file_type`, `file_size`, `role`, `private_files`
+  - Priority-based policy matching — specific scopes evaluated before catch-all
+  - Automatic approval check on file upload when enabled
+  - Manual "Send for Approval" action for files not caught by policies
+  - Approve/reject flow with comments and resubmission support
+  - Pending and History tabs for approvers, My Pending section for file owners
+  - Approval statistics and metrics endpoint
+  - Email notifications for ApprovalRequired and ApprovalDecision events
+
+- **Approval Permissions**: New granular permissions for the approval system
+  - `approvals.view` — view approval requests (Manager+ by default)
+  - `approvals.manage` — approve/reject requests (Manager+ by default)
+  - Configurable per custom role
+
+- **Wiki Documentation**: Added dedicated feature guides
+  - SSO Authentication guide (OIDC & SAML setup, attribute mapping, troubleshooting)
+  - Document Approval guide (policies, workflow, API reference)
+  - Updated Home, Admin Guide, API Reference, and Security pages
+
+### Changed
+
+- Files table has new `approval_status` column (`pending`, `approved`, `rejected`, or null)
+- Tenants table has new `approval_workflow_enabled` boolean column (default false)
+- New database tables: `approval_policies` and `approval_requests`
+- Document Workflow tab added to Company Details in admin panel
+- Sidebar navigation conditionally shows Approvals link based on tenant flag
+
+### Security
+
+- Tenant isolation enforced on all approval endpoints
+- Atomic approve/reject operations prevent race conditions
+- Role-based access control for policy management and approval actions
+- All approval actions recorded in audit log
+- Input validation on policy scopes and approval request state transitions
+
+### Notes
+
+- **Backwards compatible**: Approval workflow is disabled by default. Existing files have null `approval_status`. No action needed for existing installations.
+- **Migration 004**: `004_document_approvals.sql` adds the approval tables and columns.
+
 ## [0.1.4] - 2026-03-04
 
 ### Added

@@ -257,6 +257,8 @@ Files uploaded to a department are only visible to:
 | | `roles.manage` | Create/edit roles |
 | **Audit** | `audit.view` | View audit logs |
 | | `audit.export` | Export audit logs |
+| **Approvals** | `approvals.view` | View pending approvals |
+| | `approvals.manage` | Manage approval policies |
 | **Settings** | `settings.view` | View settings |
 | | `settings.edit` | Modify settings |
 | **Tenants** | `tenants.manage` | Manage companies |
@@ -266,6 +268,50 @@ Files uploaded to a department are only visible to:
 1. Go to **Users** → Select user
 2. Change **Role** to your custom role
 3. Save changes
+
+---
+
+## Document Approval
+
+### Overview
+
+Document Approval (v0.1.5) adds policy-based approval workflows to ClovaLink. Admins define approval policies that specify which documents require approval before they can be shared or distributed, and who is authorized to approve them.
+
+### Configuring Approval Policies
+
+*Admin or SuperAdmin*
+
+1. Navigate to **Settings** → **Company Settings** → **Document Workflow** tab
+2. Click **Create Policy**
+3. Configure:
+   - **Name**: Policy name (e.g., "Finance Document Review")
+   - **Approvers**: Users or roles authorized to approve
+   - **Conditions**: File type, department, or folder-based triggers
+   - **Notifications**: Email and in-app alerts for pending approvals
+
+### Approval Workflow
+
+1. A user uploads or edits a document that matches an approval policy
+2. The document enters **Pending Approval** status
+3. Designated approvers receive notifications
+4. An approver reviews and either **Approves** or **Rejects** the document
+5. If rejected, the owner can modify and **Resubmit**
+6. Approved documents can be shared and distributed normally
+
+### Approval Permissions
+
+| Permission | Description | Default Roles |
+|------------|-------------|---------------|
+| `approvals.view` | View pending approvals and approval history | Manager, Admin, SuperAdmin |
+| `approvals.manage` | Create, edit, and delete approval policies | Admin, SuperAdmin |
+
+These permissions can also be assigned to custom roles.
+
+### Viewing Approval History
+
+1. Navigate to **Approvals** in the sidebar
+2. Switch between **Pending** and **History** tabs
+3. Filter by status, date range, or policy
 
 ---
 

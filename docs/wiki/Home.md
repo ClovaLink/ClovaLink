@@ -56,6 +56,8 @@ ClovaLink provides secure file storage, sharing, and compliance features for org
 - **MFA Support** - TOTP-based two-factor authentication
 - **Audit Logging** - Complete activity trails for compliance
 - **GDPR Tools** - Data export and deletion request handling
+- **Single Sign-On** - OIDC and SAML 2.0 with auto-provisioning and attribute mapping
+- **Document Approval** - Policy-based approval workflow with notifications
 
 ### User Management
 - **Role-Based Access Control (RBAC)** - Four base roles with customization
@@ -128,6 +130,8 @@ Password: password123
 | [Discord Integration](Discord-Integration) | Discord DM notifications setup |
 | [AI Features](AI-Features) | AI-powered summarization, Q&A, and search |
 | [File Groups](File-Groups) | Organize files into virtual collections |
+| [SSO Authentication](SSO-Authentication) | OIDC and SAML 2.0 single sign-on |
+| [Document Approval](Document-Approval) | Policy-based document approval workflows |
 
 ## Tech Stack
 
@@ -163,5 +167,5 @@ ClovaLink is open source software licensed under the MIT License.
 
 ---
 
-*ClovaLink v1.0 - An open source project*
+*ClovaLink v0.1.5 - An open source project*
 
