@@ -20,6 +20,7 @@ const AuditLogsPage = lazy(() => import('./pages/AuditLogs').then(m => ({ defaul
 const Security = lazy(() => import('./pages/Security').then(m => ({ default: m.Security })));
 const FileBrowser = lazy(() => import('./pages/FileBrowser').then(m => ({ default: m.FileBrowser })));
 const FileRequests = lazy(() => import('./pages/FileRequests').then(m => ({ default: m.FileRequests })));
+const Approvals = lazy(() => import('./pages/Approvals').then(m => ({ default: m.Approvals })));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const SharedWithMe = lazy(() => import('./pages/SharedWithMe').then(m => ({ default: m.SharedWithMe })));
 const Help = lazy(() => import('./pages/Help').then(m => ({ default: m.Help })));
@@ -119,6 +120,7 @@ function App() {
                                                 {/* All authenticated users */}
                                                 <Route path="files" element={<FileBrowser />} />
                                                 <Route path="file-requests" element={<FileRequests />} />
+                                                <Route path="approvals" element={<Approvals />} />
                                                 <Route path="recycle-bin" element={<RecycleBin />} />
                                                 <Route path="shared-with-me" element={<SharedWithMe />} />
                                                 <Route path="extensions" element={<Extensions />} />

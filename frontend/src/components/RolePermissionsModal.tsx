@@ -7,6 +7,7 @@ import {
     Settings,
     Activity,
     Building2,
+    CheckCircle,
     Check,
     Lock,
     Unlock,
@@ -76,6 +77,11 @@ const PERMISSION_CATEGORIES = {
         icon: Building2,
         permissions: ['tenants.manage'],
     },
+    approvals: {
+        label: 'Approvals',
+        icon: CheckCircle,
+        permissions: ['approvals.view', 'approvals.manage'],
+    },
 };
 
 const PERMISSION_LABELS: Record<string, string> = {
@@ -97,6 +103,8 @@ const PERMISSION_LABELS: Record<string, string> = {
     'settings.view': 'View Settings',
     'settings.edit': 'Edit Settings',
     'tenants.manage': 'Manage Companies',
+    'approvals.view': 'View Approvals',
+    'approvals.manage': 'Manage Approvals',
 };
 
 export function RolePermissionsModal({

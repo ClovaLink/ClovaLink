@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
     Eye, Download, Trash2, Star, Edit2, Share2,
     Lock, Unlock, History, Move, Info, Building2, Sparkles, MessageSquare, FileSearch, Copy,
-    Layers, FolderMinus, ChevronRight, Plus
+    Layers, FolderMinus, ChevronRight, Plus, Clock, XCircle, RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -29,6 +29,7 @@ export interface FileItem {
     content_type?: string;
     storage_path?: string;
     is_company_folder?: boolean;
+    approval_status?: 'approved' | 'pending' | 'rejected';
     color?: string;
     file_count?: number;
 }
@@ -72,6 +73,9 @@ interface FileActionMenuProps {
     onAddToGroup?: (file: FileItem, groupId: string) => void;
     onRemoveFromGroup?: (file: FileItem) => void;
     onCreateGroupFromFile?: (file: FileItem) => void;  // Opens modal to create group with this file
+    onResubmit?: (file: FileItem) => void;  // Resubmit rejected file for approval
+    onSendForApproval?: (file: FileItem) => void;  // Manually send approved file for review
+    approvalWorkflowEnabled?: boolean;  // Whether approval workflow is enabled for this tenant
     buttonRef?: { current: HTMLButtonElement | null };
 }
 
@@ -111,6 +115,9 @@ export function FileActionMenu({
     onAddToGroup,
     onRemoveFromGroup,
     onCreateGroupFromFile,
+    onResubmit,
+    onSendForApproval,
+    approvalWorkflowEnabled,
     buttonRef,
 }: FileActionMenuProps) {
     const isFile = file.type !== 'folder';
@@ -154,6 +161,10 @@ export function FileActionMenu({
     // Check if user can modify files in company folders (only admins can)
     const canModifyInCompanyFolder = !isInsideCompanyFolder || isAdminOrHigher;
 
+    // Approval status gates — non-approved files can't be downloaded/shared/locked/moved/copied
+    const isApproved = !file.approval_status || file.approval_status === 'approved';
+    const isPendingOrRejected = file.approval_status === 'pending' || file.approval_status === 'rejected';
+
     const [position, setPosition] = useState({ top: 0, right: 0 });
 
     useEffect(() => {
@@ -186,6 +197,18 @@ export function FileActionMenu({
             style={{ top: position.top, right: position.right }}
         >
             <div className="py-1">
+                {/* Approval status banner */}
+                {file.approval_status === 'pending' && (
+                    <div className="px-4 py-2 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 flex items-center border-b border-gray-100 dark:border-gray-700">
+                        <Clock className="w-3.5 h-3.5 mr-2 flex-shrink-0" /> Pending Approval
+                    </div>
+                )}
+                {file.approval_status === 'rejected' && (
+                    <div className="px-4 py-2 text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 flex items-center border-b border-gray-100 dark:border-gray-700">
+                        <XCircle className="w-3.5 h-3.5 mr-2 flex-shrink-0" /> Rejected
+                    </div>
+                )}
+
                 {/* Preview - Files only, requires access to locked files */}
                 {isFile && canAccessLockedFile && (
                     <button className={menuItemClass} onClick={() => onPreview(file)}>
@@ -193,8 +216,8 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Share - Only if user can share AND can access locked file */}
-                {canShare && canAccessLockedFile && (
+                {/* Share - Only if user can share AND can access locked file AND file is approved */}
+                {canShare && canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onShare(file)}>
                         <Share2 className="w-4 h-4 mr-2 text-gray-400" /> Share
                     </button>
@@ -208,8 +231,8 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Download - requires access to locked files */}
-                {canAccessLockedFile && (
+                {/* Download - requires access to locked files and approval */}
+                {canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onDownload(file)}>
                         <Download className="w-4 h-4 mr-2 text-gray-400" /> Download
                     </button>
@@ -236,8 +259,8 @@ export function FileActionMenu({
 
                 <div className={dividerClass}></div>
 
-                {/* Lock/Unlock - Only for Manager, Admin, SuperAdmin, blocked in company folders for non-admins */}
-                {canLockFiles && canAccessLockedFile && canModifyInCompanyFolder && (
+                {/* Lock/Unlock - Only for Manager, Admin, SuperAdmin, blocked in company folders for non-admins, requires approval */}
+                {canLockFiles && canAccessLockedFile && canModifyInCompanyFolder && isApproved && (
                     <button className={menuItemClass} onClick={() => onLock(file)}>
                         {file.is_locked ? (
                             <>
@@ -258,15 +281,15 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Move To - Only if not locked and user can access, blocked in company folders for non-admins */}
-                {!file.is_locked && canAccessLockedFile && canModifyInCompanyFolder && (
+                {/* Move To - Only if not locked and user can access, blocked in company folders for non-admins, requires approval */}
+                {!file.is_locked && canAccessLockedFile && canModifyInCompanyFolder && isApproved && (
                     <button className={menuItemClass} onClick={() => onMove(file)}>
                         <Move className="w-4 h-4 mr-2 text-gray-400" /> Move To...
                     </button>
                 )}
 
-                {/* Copy - Only for files (not folders/groups), requires access to locked files */}
-                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && (
+                {/* Copy - Only for files (not folders/groups), requires access to locked files and approval */}
+                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onCopy(file)}>
                         <Copy className="w-4 h-4 mr-2 text-gray-400" /> Copy
                     </button>
@@ -325,6 +348,20 @@ export function FileActionMenu({
                     </button>
                 )}
 
+                {/* Resubmit for Approval - rejected files, owner only */}
+                {file.approval_status === 'rejected' && isOwner && onResubmit && (
+                    <button className={menuItemClass} onClick={() => onResubmit(file)}>
+                        <RefreshCw className="w-4 h-4 mr-2 text-amber-500" /> Resubmit for Approval
+                    </button>
+                )}
+
+                {/* Send for Approval - approved files, when workflow enabled, owner or admin */}
+                {isApproved && approvalWorkflowEnabled && onSendForApproval && (isOwner || isAdminOrHigher) && file.type !== 'folder' && (
+                    <button className={menuItemClass} onClick={() => onSendForApproval(file)}>
+                        <Clock className="w-4 h-4 mr-2 text-amber-500" /> Send for Approval
+                    </button>
+                )}
+
                 <div className={dividerClass}></div>
 
                 {/* Delete - Only owner or Admin/SuperAdmin, blocked in company folders for non-admins */}
@@ -357,6 +394,18 @@ export function FileActionMenu({
     return (
         <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-xl z-20 border border-gray-100 dark:border-gray-700 ring-1 ring-black ring-opacity-5 text-left">
             <div className="py-1">
+                {/* Approval status banner */}
+                {file.approval_status === 'pending' && (
+                    <div className="px-4 py-2 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 flex items-center border-b border-gray-100 dark:border-gray-700">
+                        <Clock className="w-3.5 h-3.5 mr-2 flex-shrink-0" /> Pending Approval
+                    </div>
+                )}
+                {file.approval_status === 'rejected' && (
+                    <div className="px-4 py-2 text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 flex items-center border-b border-gray-100 dark:border-gray-700">
+                        <XCircle className="w-3.5 h-3.5 mr-2 flex-shrink-0" /> Rejected
+                    </div>
+                )}
+
                 {/* Preview - Files only, requires access to locked files */}
                 {isFile && canAccessLockedFile && (
                     <button className={menuItemClass} onClick={() => onPreview(file)}>
@@ -364,8 +413,8 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Share - Only if user can share AND can access locked file */}
-                {canShare && canAccessLockedFile && (
+                {/* Share - Only if user can share AND can access locked file AND file is approved */}
+                {canShare && canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onShare(file)}>
                         <Share2 className="w-4 h-4 mr-2 text-gray-400" /> Share
                     </button>
@@ -379,8 +428,8 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Download - requires access to locked files */}
-                {canAccessLockedFile && (
+                {/* Download - requires access to locked files and approval */}
+                {canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onDownload(file)}>
                         <Download className="w-4 h-4 mr-2 text-gray-400" /> Download
                     </button>
@@ -407,8 +456,8 @@ export function FileActionMenu({
 
                 <div className={dividerClass}></div>
 
-                {/* Lock/Unlock - Only for Manager, Admin, SuperAdmin, blocked in company folders for non-admins */}
-                {canLockFiles && canAccessLockedFile && canModifyInCompanyFolder && (
+                {/* Lock/Unlock - Only for Manager, Admin, SuperAdmin, blocked in company folders for non-admins, requires approval */}
+                {canLockFiles && canAccessLockedFile && canModifyInCompanyFolder && isApproved && (
                     <button className={menuItemClass} onClick={() => onLock(file)}>
                         {file.is_locked ? (
                             <>
@@ -429,15 +478,15 @@ export function FileActionMenu({
                     </button>
                 )}
 
-                {/* Move To - Only if not locked and user can access, blocked in company folders for non-admins */}
-                {!file.is_locked && canAccessLockedFile && canModifyInCompanyFolder && (
+                {/* Move To - Only if not locked and user can access, blocked in company folders for non-admins, requires approval */}
+                {!file.is_locked && canAccessLockedFile && canModifyInCompanyFolder && isApproved && (
                     <button className={menuItemClass} onClick={() => onMove(file)}>
                         <Move className="w-4 h-4 mr-2 text-gray-400" /> Move To...
                     </button>
                 )}
 
-                {/* Copy - Only for files (not folders/groups), requires access to locked files */}
-                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && (
+                {/* Copy - Only for files (not folders/groups), requires access to locked files and approval */}
+                {file.type !== 'folder' && file.type !== 'group' && canAccessLockedFile && isApproved && (
                     <button className={menuItemClass} onClick={() => onCopy(file)}>
                         <Copy className="w-4 h-4 mr-2 text-gray-400" /> Copy
                     </button>
@@ -493,6 +542,20 @@ export function FileActionMenu({
                 {canAccessLockedFile && (
                     <button className={menuItemClass} onClick={() => onProperties(file)}>
                         <Info className="w-4 h-4 mr-2 text-gray-400" /> Properties
+                    </button>
+                )}
+
+                {/* Resubmit for Approval - rejected files, owner only */}
+                {file.approval_status === 'rejected' && isOwner && onResubmit && (
+                    <button className={menuItemClass} onClick={() => onResubmit(file)}>
+                        <RefreshCw className="w-4 h-4 mr-2 text-amber-500" /> Resubmit for Approval
+                    </button>
+                )}
+
+                {/* Send for Approval - approved files, when workflow enabled, owner or admin */}
+                {isApproved && approvalWorkflowEnabled && onSendForApproval && (isOwner || isAdminOrHigher) && file.type !== 'folder' && (
+                    <button className={menuItemClass} onClick={() => onSendForApproval(file)}>
+                        <Clock className="w-4 h-4 mr-2 text-amber-500" /> Send for Approval
                     </button>
                 )}
 

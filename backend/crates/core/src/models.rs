@@ -53,6 +53,8 @@ pub struct Tenant {
     pub max_upload_size_bytes: Option<i64>,
     // Auth methods
     pub auth_methods: Option<Vec<String>>,
+    // Document approval workflow
+    pub approval_workflow_enabled: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -90,6 +92,8 @@ pub struct UpdateTenantInput {
     pub data_export_enabled: Option<bool>,
     // Upload limits
     pub max_upload_size_bytes: Option<i64>,
+    // Document approval workflow
+    pub approval_workflow_enabled: Option<bool>,
 }
 
 // ==================== Department ====================
@@ -275,6 +279,8 @@ pub struct FileMetadata {
     pub visibility: String,
     // Company folder: hide owner avatar and show building icon
     pub is_company_folder: bool,
+    // Document approval status
+    pub approval_status: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -415,6 +421,9 @@ pub const ALL_PERMISSIONS: &[&str] = &[
     "settings.edit",
     // Tenant permissions
     "tenants.manage",
+    // Approval permissions
+    "approvals.view",
+    "approvals.manage",
 ];
 
 /// Get base permissions for a role level
@@ -430,6 +439,8 @@ pub fn get_base_permissions(base_role: &str) -> Vec<&'static str> {
             "files.lock",
             "requests.create",
             "requests.view",
+            "approvals.view",
+            "approvals.manage",
         ],
         "Admin" => vec![
             "files.view",
@@ -448,6 +459,8 @@ pub fn get_base_permissions(base_role: &str) -> Vec<&'static str> {
             "roles.view",
             "audit.view",
             "settings.view",
+            "approvals.view",
+            "approvals.manage",
         ],
         "SuperAdmin" => vec![
             "files.view",
@@ -471,6 +484,8 @@ pub fn get_base_permissions(base_role: &str) -> Vec<&'static str> {
             "settings.view",
             "settings.edit",
             "tenants.manage",
+            "approvals.view",
+            "approvals.manage",
         ],
         _ => vec![],
     }

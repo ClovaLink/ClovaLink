@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_ai"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_api"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "argon2",
  "async-trait",
@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_auth"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "axum",
  "chrono",
@@ -1054,7 +1054,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -1076,7 +1076,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_extensions"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "axum",
@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "clovalink_storage"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "aws-config",

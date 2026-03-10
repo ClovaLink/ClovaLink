@@ -23,7 +23,8 @@ import {
     BellRing,
     AlertTriangle,
     Ban,
-    Play
+    Play,
+    Edit2
 } from 'lucide-react';
 import { useAuthFetch, useAuth } from '../context/AuthContext';
 import { useGlobalSettings } from '../context/GlobalSettingsContext';
@@ -63,6 +64,7 @@ interface Tenant {
     session_timeout_minutes?: number;
     public_sharing_enabled?: boolean;
     auth_methods?: string[];
+    approval_workflow_enabled?: boolean;
 }
 
 interface Department {
@@ -82,7 +84,7 @@ export function CompanyDetails() {
     const [company, setCompany] = useState<Tenant | null>(null);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates' | 'ai' | 'discord'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates' | 'ai' | 'discord' | 'document-workflow'>('overview');
     
     // Notification settings state
     const [notificationSettings, setNotificationSettings] = useState<any[]>([]);
@@ -144,6 +146,15 @@ export function CompanyDetails() {
     // Auth states
     const [editEnableTotp, setEditEnableTotp] = useState(false);
 
+    // Approval workflow
+    const [editApprovalWorkflow, setEditApprovalWorkflow] = useState(false);
+    const [approvalPolicies, setApprovalPolicies] = useState<any[]>([]);
+    const [showAddPolicy, setShowAddPolicy] = useState(false);
+    const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
+    const [newPolicyName, setNewPolicyName] = useState('');
+    const [newPolicyScope, setNewPolicyScope] = useState('all');
+    const [newPolicyScopeValue, setNewPolicyScopeValue] = useState('');
+
     // Audit settings states
     const [auditLogLogins, setAuditLogLogins] = useState(true);
     const [auditLogFileOperations, setAuditLogFileOperations] = useState(true);
@@ -188,6 +199,15 @@ export function CompanyDetails() {
         }
     }, [activeTab, company?.id, selectedNotificationRole]);
 
+    useEffect(() => {
+        if (activeTab === 'document-workflow' && company?.id) {
+            authFetch(`/api/approvals/${company.id}/policies`)
+                .then(res => res.ok ? res.json() : null)
+                .then(data => { if (data?.policies) setApprovalPolicies(data.policies); })
+                .catch(() => {});
+        }
+    }, [activeTab, company?.id]);
+
     const fetchCompanyDetails = async () => {
         try {
             // Use different endpoint based on role
@@ -223,7 +243,7 @@ export function CompanyDetails() {
                     setEditSmtpSecure(found.smtp_secure !== false); // Default true
 
                     setEditEnableTotp(found.enable_totp || false);
-
+                    setEditApprovalWorkflow(found.approval_workflow_enabled || false);
 
                     // Fetch departments and users once we have the ID
                     fetchDepartments(found.id);
@@ -348,7 +368,8 @@ export function CompanyDetails() {
                     smtp_password: editSmtpPassword,
                     smtp_from: editSmtpFrom,
                     smtp_secure: editSmtpSecure,
-                    enable_totp: editEnableTotp
+                    enable_totp: editEnableTotp,
+                    approval_workflow_enabled: editApprovalWorkflow
                 }),
             });
 
@@ -741,7 +762,7 @@ export function CompanyDetails() {
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-gray-700">
                 <nav className="-mb-px flex space-x-8 overflow-x-auto">
-                    {['overview', 'settings', 'departments', 'users', 'notifications', 'email-templates', 'ai', 'discord', 'audit'].map((tab) => (
+                    {['overview', 'settings', 'departments', 'users', 'document-workflow', 'notifications', 'email-templates', 'ai', 'discord', 'audit'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
@@ -752,7 +773,7 @@ export function CompanyDetails() {
                                     : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             )}
                         >
-                            {tab === 'audit' ? 'Audit Settings' : tab === 'ai' ? 'AI' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            {tab === 'audit' ? 'Audit Settings' : tab === 'ai' ? 'AI' : tab === 'document-workflow' ? 'Document Workflow' : tab === 'email-templates' ? 'Email-templates' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                     ))}
                 </nav>
@@ -2112,6 +2133,354 @@ export function CompanyDetails() {
                         tenantId={company.id}
                         authFetch={authFetch}
                     />
+                )}
+
+                {activeTab === 'document-workflow' && company && (
+                    <div className="max-w-3xl space-y-6">
+                        {/* Enable/Disable Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Document Approval Workflow</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        When enabled, uploaded documents must be reviewed and approved by a Manager or Admin before they become accessible to other users.
+                                        Approvers are notified automatically when new files need review.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        const newVal = !editApprovalWorkflow;
+                                        setEditApprovalWorkflow(newVal);
+                                        try {
+                                            const res = await authFetch(`/api/tenants/${company.id}/edit`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ approval_workflow_enabled: newVal }),
+                                            });
+                                            if (res.ok) {
+                                                setCompany(prev => prev ? { ...prev, approval_workflow_enabled: newVal } : prev);
+                                                await refreshUser();
+                                            } else {
+                                                setEditApprovalWorkflow(!newVal);
+                                            }
+                                        } catch (e) {
+                                            setEditApprovalWorkflow(!newVal);
+                                        }
+                                    }}
+                                    className={clsx(
+                                        'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ml-6',
+                                        editApprovalWorkflow ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                                    )}
+                                >
+                                    <span className={clsx(
+                                        'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                        editApprovalWorkflow ? 'translate-x-6' : 'translate-x-1'
+                                    )} />
+                                </button>
+                            </div>
+                            {editApprovalWorkflow && (
+                                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                                    <p className="text-sm text-green-800 dark:text-green-300">
+                                        Approval workflow is active. New uploads matching your policies below will require approval. Existing files are unaffected.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Policies Card */}
+                        {editApprovalWorkflow && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Approval Policies</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                                            Policies determine which uploads require approval. Files are matched against policies in order: department-specific, company folders, then catch-all.
+                                        </p>
+                                    </div>
+                                    {!showAddPolicy && (
+                                        <button
+                                            onClick={() => setShowAddPolicy(true)}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors flex-shrink-0 ml-4"
+                                        >
+                                            + Add Policy
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="p-6">
+                                    {/* Add/Edit Policy Form */}
+                                    {showAddPolicy && (
+                                        <div className="mb-6 p-5 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600">
+                                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+                                                {editingPolicyId ? 'Edit Policy' : 'New Approval Policy'}
+                                            </h4>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Policy Name</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="e.g., Require approval for all uploads"
+                                                        value={newPolicyName}
+                                                        onChange={(e) => setNewPolicyName(e.target.value)}
+                                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Scope</label>
+                                                    <select
+                                                        value={newPolicyScope}
+                                                        onChange={(e) => setNewPolicyScope(e.target.value)}
+                                                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                    >
+                                                        <option value="all">All Uploads — Every file upload requires approval</option>
+                                                        <option value="department">Specific Department — Only uploads to a specific department</option>
+                                                        <option value="company_folder">Company Folders — Only uploads to company-wide folders</option>
+                                                        <option value="file_type">File Type — Specific file extensions (e.g., exe, zip, dmg)</option>
+                                                        <option value="file_size">File Size — Files above a size threshold</option>
+                                                        <option value="role">User Role — Uploads by users with a specific role</option>
+                                                        <option value="private_files">Private Files — Files uploaded as private only</option>
+                                                    </select>
+                                                </div>
+                                                {newPolicyScope === 'department' && (
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Department</label>
+                                                        <select
+                                                            value={newPolicyScopeValue}
+                                                            onChange={(e) => setNewPolicyScopeValue(e.target.value)}
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                        >
+                                                            <option value="">Select a department...</option>
+                                                            {departments.map(dept => (
+                                                                <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                                {newPolicyScope === 'file_type' && (
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">File Extensions</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g., exe, zip, dmg, bat, msi"
+                                                            value={newPolicyScopeValue}
+                                                            onChange={(e) => setNewPolicyScopeValue(e.target.value)}
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                        />
+                                                        <p className="text-xs text-gray-400 mt-1">Comma-separated list of extensions (without dots)</p>
+                                                    </div>
+                                                )}
+                                                {newPolicyScope === 'file_size' && (
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Size Threshold (MB)</label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            placeholder="e.g., 10"
+                                                            value={newPolicyScopeValue ? String(Math.round(Number(newPolicyScopeValue) / 1048576)) : ''}
+                                                            onChange={(e) => setNewPolicyScopeValue(String(Number(e.target.value) * 1048576))}
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                        />
+                                                        <p className="text-xs text-gray-400 mt-1">Files larger than this will require approval</p>
+                                                    </div>
+                                                )}
+                                                {newPolicyScope === 'role' && (
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">User Role</label>
+                                                        <select
+                                                            value={newPolicyScopeValue}
+                                                            onChange={(e) => setNewPolicyScopeValue(e.target.value)}
+                                                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                        >
+                                                            <option value="">Select a role...</option>
+                                                            <option value="Employee">Employee</option>
+                                                            <option value="Manager">Manager</option>
+                                                        </select>
+                                                        <p className="text-xs text-gray-400 mt-1">Uploads by users with this base role will require approval</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex justify-end space-x-3 mt-5 pt-4 border-t border-gray-200 dark:border-gray-600">
+                                                <button
+                                                    onClick={() => { setShowAddPolicy(false); setEditingPolicyId(null); setNewPolicyName(''); setNewPolicyScope('all'); setNewPolicyScopeValue(''); }}
+                                                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!newPolicyName.trim()) return;
+                                                        try {
+                                                            if (editingPolicyId) {
+                                                                const res = await authFetch(`/api/approvals/${company.id}/policies/${editingPolicyId}`, {
+                                                                    method: 'PUT',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        name: newPolicyName,
+                                                                        scope: newPolicyScope,
+                                                                        scope_value: newPolicyScope === 'department' ? newPolicyScopeValue : null,
+                                                                    }),
+                                                                });
+                                                                if (res.ok) {
+                                                                    const data = await res.json();
+                                                                    setApprovalPolicies(prev => prev.map(p => p.id === editingPolicyId ? data.policy : p));
+                                                                }
+                                                            } else {
+                                                                const res = await authFetch(`/api/approvals/${company.id}/policies`, {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        name: newPolicyName,
+                                                                        scope: newPolicyScope,
+                                                                        scope_value: newPolicyScope === 'department' ? newPolicyScopeValue : null,
+                                                                    }),
+                                                                });
+                                                                if (res.ok) {
+                                                                    const data = await res.json();
+                                                                    setApprovalPolicies(prev => [...prev, data.policy]);
+                                                                }
+                                                            }
+                                                            setShowAddPolicy(false);
+                                                            setEditingPolicyId(null);
+                                                            setNewPolicyName('');
+                                                            setNewPolicyScope('all');
+                                                            setNewPolicyScopeValue('');
+                                                        } catch (e) { console.error(e); }
+                                                    }}
+                                                    disabled={!newPolicyName.trim() || (['department', 'file_type', 'file_size', 'role'].includes(newPolicyScope) && !newPolicyScopeValue)}
+                                                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                                                >
+                                                    {editingPolicyId ? 'Save Changes' : 'Create Policy'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Policy List */}
+                                    {approvalPolicies.length === 0 && !showAddPolicy ? (
+                                        <div className="text-center py-8">
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                                                <Shield className="w-6 h-6 text-gray-400" />
+                                            </div>
+                                            <p className="text-sm font-medium text-gray-900 dark:text-white">No approval policies</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Create a policy to define which uploads require approval</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {approvalPolicies.map((policy) => (
+                                                <div key={policy.id} className={clsx(
+                                                    "rounded-lg border p-4 transition-colors",
+                                                    policy.is_active
+                                                        ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                                                        : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60"
+                                                )}>
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center space-x-2">
+                                                                <p className="text-sm font-semibold text-gray-900 dark:text-white">{policy.name}</p>
+                                                                <span className={clsx(
+                                                                    "px-2 py-0.5 text-[10px] font-medium rounded-full",
+                                                                    policy.is_active
+                                                                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                                                        : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                                                                )}>
+                                                                    {policy.is_active ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                {policy.scope === 'all' && 'Applies to all file uploads across the organization'}
+                                                                {policy.scope === 'company_folder' && 'Applies to uploads in company-wide folders only'}
+                                                                {policy.scope === 'department' && 'Applies to uploads in a specific department'}
+                                                                {policy.scope === 'file_type' && `File extensions: ${policy.scope_value || ''}`}
+                                                                {policy.scope === 'file_size' && `Files larger than ${policy.scope_value ? Math.round(Number(policy.scope_value) / 1048576) : '?'} MB`}
+                                                                {policy.scope === 'role' && `Uploads by ${policy.scope_value || ''} users`}
+                                                                {policy.scope === 'private_files' && 'Applies to files uploaded as private'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center space-x-2 ml-4">
+                                                            <button
+                                                                type="button"
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await authFetch(`/api/approvals/${company.id}/policies/${policy.id}`, {
+                                                                            method: 'PUT',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify({ is_active: !policy.is_active }),
+                                                                        });
+                                                                        setApprovalPolicies(prev => prev.map(p => p.id === policy.id ? { ...p, is_active: !p.is_active } : p));
+                                                                    } catch (e) { console.error(e); }
+                                                                }}
+                                                                className={clsx(
+                                                                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                                                                    policy.is_active ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'
+                                                                )}
+                                                            >
+                                                                <span className={clsx(
+                                                                    'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                                                    policy.is_active ? 'translate-x-6' : 'translate-x-1'
+                                                                )} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingPolicyId(policy.id);
+                                                                    setNewPolicyName(policy.name);
+                                                                    setNewPolicyScope(policy.scope);
+                                                                    setNewPolicyScopeValue(policy.scope_value || '');
+                                                                    setShowAddPolicy(true);
+                                                                }}
+                                                                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded transition-colors"
+                                                                title="Edit policy"
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (!confirm(`Delete policy "${policy.name}"? This cannot be undone.`)) return;
+                                                                    try {
+                                                                        await authFetch(`/api/approvals/${company.id}/policies/${policy.id}`, { method: 'DELETE' });
+                                                                        setApprovalPolicies(prev => prev.filter(p => p.id !== policy.id));
+                                                                    } catch (e) { console.error(e); }
+                                                                }}
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
+                                                                title="Delete policy"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* How It Works Card */}
+                        {editApprovalWorkflow && (
+                            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">How It Works</h3>
+                                <div className="space-y-3 text-xs text-gray-600 dark:text-gray-400">
+                                    <div className="flex items-start space-x-3">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center text-[10px] font-bold">1</span>
+                                        <p>An employee uploads a file that matches an active approval policy.</p>
+                                    </div>
+                                    <div className="flex items-start space-x-3">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center text-[10px] font-bold">2</span>
+                                        <p>The file is stored but marked as "Pending Approval." It is only visible to the uploader and users with the <strong>Manage Approvals</strong> permission.</p>
+                                    </div>
+                                    <div className="flex items-start space-x-3">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center text-[10px] font-bold">3</span>
+                                        <p>Managers and Admins receive a notification and can approve or reject the file from the <strong>Approvals</strong> page.</p>
+                                    </div>
+                                    <div className="flex items-start space-x-3">
+                                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center text-[10px] font-bold">4</span>
+                                        <p>Once approved, the file becomes accessible. If rejected, the uploader is notified with a reason and can resubmit.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {activeTab === 'audit' && (

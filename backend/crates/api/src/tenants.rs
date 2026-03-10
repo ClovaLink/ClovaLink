@@ -117,9 +117,18 @@ pub async fn list_tenants(
             "session_timeout_minutes": tenant.session_timeout_minutes,
             "public_sharing_enabled": tenant.public_sharing_enabled,
             "data_export_enabled": tenant.data_export_enabled.unwrap_or(true),
+            "approval_workflow_enabled": tenant.approval_workflow_enabled.unwrap_or(false),
+            "enable_totp": tenant.enable_totp,
+            "auth_methods": tenant.auth_methods,
             "user_count": user_count,
             "created_at": tenant.created_at,
             "restrictions": restrictions,
+            "smtp_host": tenant.smtp_host,
+            "smtp_port": tenant.smtp_port,
+            "smtp_username": tenant.smtp_username,
+            "smtp_password": tenant.smtp_password,
+            "smtp_from": tenant.smtp_from,
+            "smtp_secure": tenant.smtp_secure,
         }));
     }
 
@@ -198,8 +207,20 @@ pub async fn accessible_tenants(
             "compliance_mode": tenant.compliance_mode,
             "retention_policy_days": tenant.retention_policy_days,
             "data_export_enabled": tenant.data_export_enabled.unwrap_or(true),
+            "approval_workflow_enabled": tenant.approval_workflow_enabled.unwrap_or(false),
+            "enable_totp": tenant.enable_totp,
+            "auth_methods": tenant.auth_methods,
             "is_primary": tenant.id == primary_tenant_id,
             "restrictions": restrictions,
+            "storage_used_bytes": 0,
+            "storage_quota_bytes": tenant.storage_quota_bytes,
+            "max_upload_size_bytes": tenant.max_upload_size_bytes,
+            "smtp_host": tenant.smtp_host,
+            "smtp_port": tenant.smtp_port,
+            "smtp_username": tenant.smtp_username,
+            "smtp_password": tenant.smtp_password,
+            "smtp_from": tenant.smtp_from,
+            "smtp_secure": tenant.smtp_secure,
         }));
     }
 
@@ -359,6 +380,10 @@ pub async fn update_tenant(
     }
     if let Some(_data_export_enabled) = &input.data_export_enabled {
         updates.push(format!("data_export_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    if let Some(_approval_workflow_enabled) = &input.approval_workflow_enabled {
+        updates.push(format!("approval_workflow_enabled = ${}", param_count));
     }
 
     if updates.is_empty() {
@@ -423,6 +448,9 @@ pub async fn update_tenant(
     }
     if let Some(data_export_enabled) = input.data_export_enabled {
         db_query = db_query.bind(data_export_enabled);
+    }
+    if let Some(approval_workflow_enabled) = input.approval_workflow_enabled {
+        db_query = db_query.bind(approval_workflow_enabled);
     }
 
     let tenant = db_query
@@ -578,6 +606,11 @@ pub async fn edit_my_company(
     // Handle max_upload_size_bytes field (Admins can set upload limits)
     if let Some(_max_upload_size_bytes) = &input.max_upload_size_bytes {
         updates.push(format!("max_upload_size_bytes = ${}", param_count));
+        param_count += 1;
+    }
+    // Handle approval_workflow_enabled field (Admins can toggle document approval)
+    if let Some(_approval_workflow_enabled) = &input.approval_workflow_enabled {
+        updates.push(format!("approval_workflow_enabled = ${}", param_count));
     }
 
     if updates.is_empty() {
@@ -640,6 +673,9 @@ pub async fn edit_my_company(
     }
     if let Some(max_upload_size_bytes) = input.max_upload_size_bytes {
         db_query = db_query.bind(max_upload_size_bytes);
+    }
+    if let Some(approval_workflow_enabled) = input.approval_workflow_enabled {
+        db_query = db_query.bind(approval_workflow_enabled);
     }
 
     let tenant = db_query

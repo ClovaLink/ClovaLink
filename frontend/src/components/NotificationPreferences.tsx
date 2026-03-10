@@ -37,7 +37,8 @@ const DEFAULT_LABELS: PreferenceLabel[] = [
     { event_type: 'user_action', label: 'User Actions', description: 'Notifications about new users and role changes' },
     { event_type: 'compliance_alert', label: 'Compliance Alerts', description: 'Important compliance-related notifications' },
     { event_type: 'storage_warning', label: 'Storage Warnings', description: 'Alerts when storage quota is running low' },
-    { event_type: 'file_shared', label: 'File Sharing', description: 'Notifications when files are shared with you' }
+    { event_type: 'file_shared', label: 'File Sharing', description: 'Notifications when files are shared with you' },
+    { event_type: 'approval', label: 'Approvals', description: 'Notifications about document approvals requiring your action' }
 ];
 
 interface NotificationPreferencesProps {

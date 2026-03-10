@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle, Share2, Layers } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle, Share2, Layers, CheckCircle } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import clsx from 'clsx';
 import { useAuth, useAuthFetch } from '../context/AuthContext';
@@ -43,6 +43,7 @@ interface NavItem {
     permission: string | null;
     superAdminOnly?: boolean;
     adminOnly?: boolean; // Only visible to SuperAdmin and Admin
+    requiresTenantFlag?: string; // Only show when this tenant flag is true
 }
 
 const NAVIGATION: NavItem[] = [
@@ -51,6 +52,7 @@ const NAVIGATION: NavItem[] = [
     { name: 'Users', href: '/users', icon: Users, permission: 'users.view' },
     { name: 'Files', href: '/files', icon: FileText, permission: 'files.view' },
     { name: 'Requests', href: '/file-requests', icon: Link2, permission: 'requests.view' },
+    { name: 'Approvals', href: '/approvals', icon: CheckCircle, permission: 'approvals.view', requiresTenantFlag: 'approval_workflow_enabled' },
     { name: 'Shared', href: '/shared-with-me', icon: Share2, permission: 'files.view' },
     { name: 'Security', href: '/security', icon: Shield, permission: 'audit.view' },
     { name: 'Performance', href: '/performance', icon: Activity, permission: null, superAdminOnly: true },
@@ -392,6 +394,10 @@ export function Layout() {
                             // Admin-only items (SuperAdmin or Admin)
                             if (item.adminOnly) {
                                 return user?.role === 'SuperAdmin' || user?.role === 'Admin';
+                            }
+                            // Tenant feature flag check
+                            if (item.requiresTenantFlag && !(currentCompany as any)?.[item.requiresTenantFlag]) {
+                                return false;
                             }
                             // No permission required
                             if (!item.permission) {

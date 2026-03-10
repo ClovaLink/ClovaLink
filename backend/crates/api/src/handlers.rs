@@ -808,9 +808,51 @@ pub async fn upload_file(
             }
         }
         
+        // Check if approval workflow is enabled and a policy matches
+        let mut approval_pending = false;
+        if let Ok(Some((approval_enabled,))) = sqlx::query_as::<_, (bool,)>(
+            "SELECT COALESCE(approval_workflow_enabled, false) FROM tenants WHERE id = $1"
+        ).bind(tenant_id).fetch_optional(&state.pool).await {
+            if approval_enabled {
+                let is_cf = is_inside_company_folder(&state.pool, tenant_id, if parent_path.is_empty() { None } else { Some(&parent_path) }).await;
+                let upload_ctx = crate::approvals::FileUploadContext {
+                    department_id,
+                    is_company_folder: is_cf,
+                    file_name: final_file_name.clone(),
+                    file_size: size,
+                    visibility: visibility.to_string(),
+                    uploader_role: auth.role.clone(),
+                };
+                if let Some(policy) = crate::approvals::find_matching_policy(&state.pool, tenant_id, &upload_ctx).await {
+                    let _ = sqlx::query("UPDATE files_metadata SET approval_status = 'pending' WHERE id = $1")
+                        .bind(file_id).execute(&state.pool).await;
+                    let _ = sqlx::query(
+                        "INSERT INTO approval_requests (tenant_id, file_id, policy_id, requested_by) VALUES ($1, $2, $3, $4)"
+                    )
+                    .bind(tenant_id).bind(file_id).bind(policy.id).bind(auth.user_id)
+                    .execute(&state.pool).await;
+                    approval_pending = true;
+
+                    // Notify approvers (managers/admins)
+                    if let Ok(Some(tenant)) = sqlx::query_as::<_, clovalink_core::models::Tenant>("SELECT * FROM tenants WHERE id = $1")
+                        .bind(tenant_id).fetch_optional(&state.pool).await
+                    {
+                        let _ = notification_service::notify_all_admins(
+                            &state.pool,
+                            &tenant,
+                            notification_service::NotificationType::ApprovalRequired,
+                            "File Pending Approval",
+                            &format!("\"{}\" was uploaded and requires approval.", &final_file_name),
+                            Some(json!({"file_id": file_id, "file_name": &final_file_name, "uploader_id": auth.user_id})),
+                        ).await;
+                    }
+                }
+            }
+        }
+
         // Include info about whether the file was renamed or deduplicated
         let was_renamed = final_file_name != file_name;
-        
+
         return Ok(Json(json!({
             "message": if is_deduplicated { 
                 "File uploaded (deduplicated - content already exists)" 
@@ -827,7 +869,8 @@ pub async fn upload_file(
             "ulid": file_ulid,
             "content_hash": content_hash,
             "key": key,
-            "version": version
+            "version": version,
+            "approval_status": if approval_pending { "pending" } else { "approved" },
         })));
     }
 
@@ -1011,6 +1054,16 @@ pub async fn list_files(
 
     // Build query - exclude files that are in a group (they appear inside the group view)
     let mut query = String::from("SELECT * FROM files_metadata WHERE tenant_id = $1 AND is_deleted = false AND group_id IS NULL");
+
+    // Approval status filter: non-approvers only see approved files + their own pending/rejected
+    if matches!(role.as_str(), "Manager" | "Admin" | "SuperAdmin") {
+        // Approvers see all files regardless of approval status
+    } else {
+        query.push_str(&format!(
+            " AND (approval_status = 'approved' OR owner_id = '{}')",
+            auth.user_id
+        ));
+    }
     
     // Visibility filter based on requested view mode
     let view_mode = params.visibility.as_deref().unwrap_or("department");
@@ -1264,7 +1317,8 @@ pub async fn list_files(
             "lock_requires_role": meta.lock_requires_role,
             "has_lock_password": meta.lock_password_hash.is_some(),
             "content_type": meta.content_type,
-            "storage_path": meta.storage_path
+            "storage_path": meta.storage_path,
+            "approval_status": meta.approval_status.as_deref().unwrap_or("approved")
         })
     }).collect();
 
@@ -1791,6 +1845,26 @@ pub async fn download_file(
             auth.user_id, file_uuid
         );
         return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Check approval status — block download of non-approved files for non-approvers
+    let approval_check: Option<(String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT COALESCE(approval_status, 'approved'), owner_id FROM files_metadata WHERE id = $1 AND tenant_id = $2"
+    )
+    .bind(file_uuid)
+    .bind(tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some((status, owner_id)) = &approval_check {
+        if status != "approved" {
+            let is_owner = owner_id.map(|oid| oid == auth.user_id).unwrap_or(false);
+            let is_approver = matches!(auth.role.as_str(), "Manager" | "Admin" | "SuperAdmin");
+            if !is_owner && !is_approver {
+                return Err(StatusCode::FORBIDDEN);
+            }
+        }
     }
 
     // First check if this is a directory
@@ -4393,6 +4467,21 @@ pub async fn create_file_share(
         return Err(StatusCode::FORBIDDEN);
     }
     
+    // Block sharing of non-approved files
+    let share_approval: Option<(String,)> = sqlx::query_as(
+        "SELECT COALESCE(approval_status, 'approved') FROM files_metadata WHERE id = $1 AND tenant_id = $2"
+    )
+    .bind(file_uuid)
+    .bind(tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if let Some((status,)) = &share_approval {
+        if status != "approved" {
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+
     // Check if file is inside a company folder - only admins can share
     if auth.role != "SuperAdmin" && auth.role != "Admin" {
         if is_file_in_company_folder(&state.pool, tenant_id, file_uuid).await {
@@ -4400,7 +4489,7 @@ pub async fn create_file_share(
             return Err(StatusCode::FORBIDDEN);
         }
     }
-    
+
     // Verify file/folder exists
     let file_check: Option<(String, bool, Option<String>)> = sqlx::query_as(
         "SELECT name, is_directory, parent_path FROM files_metadata WHERE id = $1 AND tenant_id = $2 AND is_deleted = false"

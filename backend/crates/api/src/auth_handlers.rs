@@ -364,6 +364,7 @@ pub async fn login(
             "compliance_mode": active_tenant.compliance_mode,
             "retention_policy_days": active_tenant.retention_policy_days,
             "data_export_enabled": active_tenant.data_export_enabled.unwrap_or(true),
+            "approval_workflow_enabled": active_tenant.approval_workflow_enabled.unwrap_or(false),
         },
         "primary_tenant_suspended": switched_tenant,
         "suspended_tenant_name": if switched_tenant { Some(&tenant.name) } else { None }
@@ -732,6 +733,7 @@ struct TenantInfo {
     compliance_mode: String,
     retention_policy_days: i32,
     data_export_enabled: bool,
+    approval_workflow_enabled: bool,
 }
 
 pub async fn me(
@@ -759,8 +761,8 @@ pub async fn me(
 
     // Use tenant_id from JWT (auth.tenant_id) not from user record
     // This ensures we show the correct tenant after switching
-    let tenant: (Uuid, String, String, String, String, i32, Option<bool>) = sqlx::query_as(
-        "SELECT id, name, domain, plan, compliance_mode, retention_policy_days, data_export_enabled FROM tenants WHERE id = $1"
+    let tenant: (Uuid, String, String, String, String, i32, Option<bool>, Option<bool>) = sqlx::query_as(
+        "SELECT id, name, domain, plan, compliance_mode, retention_policy_days, data_export_enabled, approval_workflow_enabled FROM tenants WHERE id = $1"
     )
     .bind(auth.tenant_id)
     .fetch_one(&state.pool)
@@ -790,6 +792,7 @@ pub async fn me(
             compliance_mode: tenant.4,
             retention_policy_days: tenant.5,
             data_export_enabled: tenant.6.unwrap_or(true),
+            approval_workflow_enabled: tenant.7.unwrap_or(false),
         },
     };
     

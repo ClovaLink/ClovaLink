@@ -26,6 +26,7 @@ interface Tenant {
     compliance_mode: string;
     retention_policy_days?: number;
     data_export_enabled?: boolean;
+    approval_workflow_enabled?: boolean;
 }
 
 interface AuthContextType {

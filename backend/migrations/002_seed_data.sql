@@ -1100,3 +1100,133 @@ This is an automated message from {{company_name}}.',
     '{"file_name": "Name of the flagged file", "threat_name": "Reason for flagging", "action_taken": "Action taken (quarantined, removed, flagged)", "company_name": "Organization name"}'::jsonb
 )
 ON CONFLICT (template_key) DO NOTHING;
+
+-- Approval workflow email templates
+INSERT INTO email_templates (template_key, name, subject, body_html, body_text, variables) VALUES
+(
+    'approval_required',
+    'File Approval Required',
+    'Action Required: "{{file_name}}" needs your approval',
+    '<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; }
+        .file-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .detail-row { display: flex; padding: 8px 0; }
+        .detail-label { font-weight: 600; width: 120px; color: #6b7280; }
+        .detail-value { color: #111827; }
+        .btn { display: inline-block; padding: 12px 24px; background: #059669; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 16px; }
+        .footer { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; text-align: center; font-size: 14px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>File Pending Approval</h1>
+        </div>
+        <div class="content">
+            <p>Hi {{user_name}},</p>
+            <p>A new file has been uploaded and requires your approval before it can be accessed by other users.</p>
+            <div class="file-box">
+                <div class="detail-row">
+                    <span class="detail-label">File:</span>
+                    <span class="detail-value">{{file_name}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Uploaded by:</span>
+                    <span class="detail-value">{{uploader_name}}</span>
+                </div>
+            </div>
+            <p>Please review and approve or reject this file.</p>
+            <a href="{{app_url}}/approvals" class="btn">Review File</a>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from {{company_name}}.</p>
+        </div>
+    </div>
+</body>
+</html>',
+    'FILE PENDING APPROVAL
+
+Hi {{user_name}},
+
+A new file has been uploaded and requires your approval.
+
+FILE DETAILS:
+- File: {{file_name}}
+- Uploaded by: {{uploader_name}}
+
+Please review and approve or reject this file at:
+{{app_url}}/approvals
+
+This is an automated message from {{company_name}}.',
+    '{"user_name": "Recipient name", "file_name": "Name of the uploaded file", "uploader_name": "Name of the uploader", "company_name": "Organization name", "app_url": "Application URL"}'::jsonb
+),
+(
+    'approval_decision',
+    'File Approval Decision',
+    'Your file "{{file_name}}" has been {{decision}}',
+    '<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header-approved { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+        .header-rejected { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; }
+        .result-box { border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .approved { background: #ecfdf5; border: 1px solid #a7f3d0; }
+        .rejected { background: #fef2f2; border: 1px solid #fecaca; }
+        .detail-row { display: flex; padding: 8px 0; }
+        .detail-label { font-weight: 600; width: 120px; color: #6b7280; }
+        .detail-value { color: #111827; }
+        .footer { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; text-align: center; font-size: 14px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <p>Hi,</p>
+            <p>Your file <strong>"{{file_name}}"</strong> has been <strong>{{decision}}</strong>.</p>
+            <div class="result-box">
+                <div class="detail-row">
+                    <span class="detail-label">File:</span>
+                    <span class="detail-value">{{file_name}}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Status:</span>
+                    <span class="detail-value">{{decision}}</span>
+                </div>
+                {{#if reason}}
+                <div class="detail-row">
+                    <span class="detail-label">Reason:</span>
+                    <span class="detail-value">{{reason}}</span>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from {{company_name}}.</p>
+        </div>
+    </div>
+</body>
+</html>',
+    'FILE APPROVAL DECISION
+
+Hi,
+
+Your file "{{file_name}}" has been {{decision}}.
+
+Reason: {{reason}}
+
+This is an automated message from {{company_name}}.',
+    '{"file_name": "Name of the file", "decision": "approved or rejected", "reason": "Reason for rejection (if applicable)", "company_name": "Organization name"}'::jsonb
+)
+ON CONFLICT (template_key) DO NOTHING;

@@ -9,6 +9,7 @@ export interface Company {
     compliance_mode?: string;
     retention_policy_days?: number;
     data_export_enabled?: boolean;
+    approval_workflow_enabled?: boolean;
 }
 
 interface TenantContextType {
@@ -35,6 +36,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
                 compliance_mode: tenant.compliance_mode,
                 retention_policy_days: tenant.retention_policy_days,
                 data_export_enabled: tenant.data_export_enabled,
+                approval_workflow_enabled: tenant.approval_workflow_enabled,
             });
         }
     }, [tenant]);

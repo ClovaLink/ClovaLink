@@ -45,6 +45,7 @@ mod sso_mappings;
 mod comments;
 mod sharing;
 mod groups;
+pub mod approvals;
 pub mod compliance;
 pub mod middleware;
 
@@ -478,7 +479,19 @@ async fn main() {
         .route("/api/file-requests/{id}/permanent",
             delete(file_requests::permanent_delete_file_request)
         )
-        
+
+        // Approvals
+        .route("/api/approvals/{company_id}/pending", get(approvals::list_pending))
+        .route("/api/approvals/{company_id}/history", get(approvals::list_history))
+        .route("/api/approvals/{company_id}/my-pending", get(approvals::list_my_pending))
+        .route("/api/approvals/{company_id}/stats", get(approvals::get_stats))
+        .route("/api/approvals/{company_id}/{request_id}/approve", post(approvals::approve_file))
+        .route("/api/approvals/{company_id}/{request_id}/reject", post(approvals::reject_file))
+        .route("/api/approvals/{company_id}/{file_id}/send", post(approvals::send_for_approval))
+        .route("/api/approvals/{company_id}/{file_id}/resubmit", post(approvals::resubmit))
+        .route("/api/approvals/{company_id}/policies", get(approvals::list_policies).post(approvals::create_policy))
+        .route("/api/approvals/{company_id}/policies/{id}", put(approvals::update_policy).delete(approvals::delete_policy))
+
         // Users
         .route("/api/users", 
             get(users::list_users)

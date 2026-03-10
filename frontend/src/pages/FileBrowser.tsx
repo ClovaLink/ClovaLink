@@ -53,6 +53,7 @@ interface FileItem {
     content_type?: string;
     storage_path?: string;
     is_company_folder?: boolean;
+    approval_status?: 'approved' | 'pending' | 'rejected';
     group_id?: string;
     // Group-specific fields
     color?: string;
@@ -1426,6 +1427,30 @@ export function FileBrowser() {
     const handleCopy = (file: FileItem) => {
         if (file.type === 'folder' || file.type === 'group') return; // Can't copy folders or groups
         setClipboardFile(file);
+        setActiveMenu(null);
+    };
+
+    // Resubmit rejected file for approval
+    const handleResubmit = async (file: FileItem) => {
+        if (!companyId) return;
+        try {
+            const res = await authFetch(`/api/approvals/${companyId}/${file.id}/resubmit`, { method: 'POST' });
+            if (res.ok) fetchFiles();
+        } catch (e) {
+            console.error('Failed to resubmit:', e);
+        }
+        setActiveMenu(null);
+    };
+
+    // Send file for approval manually
+    const handleSendForApproval = async (file: FileItem) => {
+        if (!companyId) return;
+        try {
+            const res = await authFetch(`/api/approvals/${companyId}/${file.id}/send`, { method: 'POST' });
+            if (res.ok) fetchFiles();
+        } catch (e) {
+            console.error('Failed to send for approval:', e);
+        }
         setActiveMenu(null);
     };
 
@@ -3101,6 +3126,9 @@ export function FileBrowser() {
                                                 onAddToGroup={handleAddToGroup}
                                                 onRemoveFromGroup={handleRemoveFromGroup}
                                                 onCreateGroupFromFile={handleCreateGroupFromFile}
+                                                onResubmit={handleResubmit}
+                                                onSendForApproval={handleSendForApproval}
+                                                approvalWorkflowEnabled={currentCompany?.approval_workflow_enabled}
                                                 buttonRef={{ current: menuButtonRefs.current.get(`grid-${file.id}`) || null }}
                                             />
                                         )}
@@ -3230,6 +3258,8 @@ export function FileBrowser() {
                                                             {file.name}
                                                             {file.visibility === 'private' && <span title="Private"><EyeOff className="w-3.5 h-3.5 ml-2 text-purple-500" /></span>}
                                                             {file.is_locked && <span title="Locked"><Lock className="w-3.5 h-3.5 ml-1 text-orange-500" /></span>}
+                                                            {file.approval_status === 'pending' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">Pending</span>}
+                                                            {file.approval_status === 'rejected' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">Rejected</span>}
                                                         </div>
                                                         <div className="sm:hidden text-xs text-gray-500 dark:text-gray-400">{file.size} • {file.modified}</div>
                                                     </div>
@@ -3305,6 +3335,9 @@ export function FileBrowser() {
                                                         onAddToGroup={handleAddToGroup}
                                                         onRemoveFromGroup={handleRemoveFromGroup}
                                                         onCreateGroupFromFile={handleCreateGroupFromFile}
+                                                        onResubmit={handleResubmit}
+                                                        onSendForApproval={handleSendForApproval}
+                                                        approvalWorkflowEnabled={currentCompany?.approval_workflow_enabled}
                                                         buttonRef={{ current: menuButtonRefs.current.get(`list-${file.id}`) || null }}
                                                     />
                                                 )}

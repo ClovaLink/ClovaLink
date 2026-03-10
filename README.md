@@ -136,6 +136,7 @@ Most small businesses need 80% of enterprise features at 10% of the cost. **Clov
 - Role-based access control
 - Two-factor authentication (TOTP)
 - OIDC & SAML Single Sign-On (SSO)
+- Document approval workflow
 - Immutable audit logs
 - Real-time security alerts
 - Session management
@@ -761,6 +762,8 @@ All require `Authorization: Bearer <token>` header.
 | `/api/oidc/providers` | OIDC provider CRUD (SuperAdmin) |
 | `/api/saml/providers` | SAML provider CRUD (SuperAdmin) |
 | `/api/sso/mappings` | Attribute mapping CRUD (SuperAdmin) |
+| `/api/approvals` | Document approval workflow (pending, history, approve, reject) |
+| `/api/approvals/policies` | Approval policy CRUD (Admin) |
 
 > See [backend/README.md](backend/README.md) for complete API documentation.
 
@@ -779,6 +782,7 @@ Security is a core focus of ClovaLink. Key measures include:
 - **CORS Lockdown**: Explicit origin allowlisting in production
 - **OIDC SSO**: State/nonce CSRF protection, encrypted client secrets, lockout prevention
 - **SAML SSO**: XML signature verification (pure Rust), assertion replay protection, time window validation, audience restriction
+- **Document Approval**: Atomic approve/reject operations, tenant-isolated policies, role-based access control, audit logging
 
 > See [Security Documentation](docs/wiki/Security.md) for complete security documentation and hardening guide.
 
@@ -799,6 +803,7 @@ Security is a core focus of ClovaLink. Key measures include:
 - [x] OIDC Single Sign-On (Google, Microsoft, Okta)
 - [x] SAML 2.0 Single Sign-On (ADFS, Azure AD, Okta)
 - [x] IdP attribute/claim mapping (roles & departments)
+- [x] Document approval workflow (per-tenant, policy-based)
 - [ ] Mobile apps (iOS/Android)
 - [ ] WebDAV support
 - [ ] Real-time collaboration

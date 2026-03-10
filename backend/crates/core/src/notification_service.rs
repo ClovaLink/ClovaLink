@@ -19,6 +19,8 @@ pub enum NotificationType {
     StorageWarning,
     FileShared,
     MalwareDetected,
+    ApprovalRequired,
+    ApprovalDecision,
 }
 
 impl NotificationType {
@@ -32,6 +34,8 @@ impl NotificationType {
             NotificationType::StorageWarning => "storage_warning",
             NotificationType::FileShared => "file_shared",
             NotificationType::MalwareDetected => "malware_detected",
+            NotificationType::ApprovalRequired => "approval_required",
+            NotificationType::ApprovalDecision => "approval_decision",
         }
     }
 
@@ -44,6 +48,7 @@ impl NotificationType {
             NotificationType::StorageWarning => "storage_warning",
             NotificationType::FileShared => "file_shared",
             NotificationType::MalwareDetected => "security_alert",
+            NotificationType::ApprovalRequired | NotificationType::ApprovalDecision => "approval",
         }
     }
 }
@@ -218,7 +223,9 @@ pub fn can_receive_notification(
         "Manager" => match notification_type {
             NotificationType::FileUpload
             | NotificationType::RequestExpiring
-            | NotificationType::FileShared => true,
+            | NotificationType::FileShared
+            | NotificationType::ApprovalRequired
+            | NotificationType::ApprovalDecision => true,
             NotificationType::UserCreated
             | NotificationType::RoleChanged
             | NotificationType::ComplianceAlert
@@ -226,7 +233,8 @@ pub fn can_receive_notification(
             | NotificationType::MalwareDetected => false,
         },
         "Employee" => match notification_type {
-            NotificationType::FileShared => true,
+            NotificationType::FileShared
+            | NotificationType::ApprovalDecision => true,
             NotificationType::FileUpload | NotificationType::RequestExpiring => {
                 // Only if they own the resource
                 resource_owner_id.map_or(false, |owner| owner == user_id)
