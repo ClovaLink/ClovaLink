@@ -55,6 +55,11 @@ pub struct Tenant {
     pub auth_methods: Option<Vec<String>>,
     // Document approval workflow
     pub approval_workflow_enabled: Option<bool>,
+    // Backup settings
+    pub backup_enabled: Option<bool>,
+    pub auto_backup_enabled: Option<bool>,
+    pub auto_backup_cron: Option<String>,
+    pub auto_backup_retention_count: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -94,6 +99,11 @@ pub struct UpdateTenantInput {
     pub max_upload_size_bytes: Option<i64>,
     // Document approval workflow
     pub approval_workflow_enabled: Option<bool>,
+    // Backup settings
+    pub backup_enabled: Option<bool>,
+    pub auto_backup_enabled: Option<bool>,
+    pub auto_backup_cron: Option<String>,
+    pub auto_backup_retention_count: Option<i32>,
 }
 
 // ==================== Department ====================

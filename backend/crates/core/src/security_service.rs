@@ -49,6 +49,10 @@ pub enum AlertType {
     PotentialTokenTheft,
     MalwareDetected,
     UserSuspendedMalware,
+    BackupDecryptFailed,
+    BackupBruteForce,
+    BackupExportSecrets,
+    PasswordConfirmFailed,
 }
 
 impl AlertType {
@@ -65,6 +69,10 @@ impl AlertType {
             AlertType::PotentialTokenTheft => "potential_token_theft",
             AlertType::MalwareDetected => "malware_detected",
             AlertType::UserSuspendedMalware => "user_suspended_malware",
+            AlertType::BackupDecryptFailed => "backup_decrypt_failed",
+            AlertType::BackupBruteForce => "backup_brute_force",
+            AlertType::BackupExportSecrets => "backup_export_secrets",
+            AlertType::PasswordConfirmFailed => "password_confirm_failed",
         }
     }
 
@@ -81,6 +89,10 @@ impl AlertType {
             AlertType::PotentialTokenTheft => AlertSeverity::High,
             AlertType::MalwareDetected => AlertSeverity::High,
             AlertType::UserSuspendedMalware => AlertSeverity::Critical,
+            AlertType::BackupDecryptFailed => AlertSeverity::High,
+            AlertType::BackupBruteForce => AlertSeverity::Critical,
+            AlertType::BackupExportSecrets => AlertSeverity::High,
+            AlertType::PasswordConfirmFailed => AlertSeverity::Medium,
         }
     }
 }

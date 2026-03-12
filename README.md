@@ -137,6 +137,7 @@ Most small businesses need 80% of enterprise features at 10% of the cost. **Clov
 - Two-factor authentication (TOTP)
 - OIDC & SAML Single Sign-On (SSO)
 - Document approval workflow
+- Encrypted backup & restore
 - Immutable audit logs
 - Real-time security alerts
 - Session management

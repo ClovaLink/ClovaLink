@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle, Share2, Layers, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Building2, Search, ChevronDown, LogOut, Puzzle, Folder, User, Menu, X, Link2, Shield, Activity, HelpCircle, Share2, Layers, CheckCircle, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import clsx from 'clsx';
 import { useAuth, useAuthFetch } from '../context/AuthContext';
@@ -91,6 +91,16 @@ export function Layout() {
     const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
     const [activeExtensionPanel, setActiveExtensionPanel] = useState<string | null>(null);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    const sidebarKey = `sidebar-collapsed-${user?.id ?? 'default'}`;
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(`sidebar-collapsed-${user?.id ?? 'default'}`) === 'true');
+
+    const toggleSidebarCollapsed = () => {
+        setSidebarCollapsed(prev => {
+            const next = !prev;
+            localStorage.setItem(sidebarKey, String(next));
+            return next;
+        });
+    };
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
     const [isSearching, setIsSearching] = useState(false);
@@ -368,13 +378,34 @@ export function Layout() {
 
             {/* Sidebar */}
             <aside className={clsx(
-                "fixed md:relative z-50 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 h-full",
-                isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+                "fixed md:relative z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 h-full",
+                sidebarCollapsed ? "w-16" : "w-64",
+                isMobileSidebarOpen ? "translate-x-0 !w-64" : "-translate-x-full md:translate-x-0"
             )}>
-                <div className="h-auto py-4 flex items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center space-x-2 flex-1 justify-center">
-                        <Logo className="h-40 text-black dark:text-white" />
-                    </div>
+                <div className={clsx("relative border-b border-gray-200 dark:border-gray-700", sidebarCollapsed && !isMobileSidebarOpen ? "px-2 py-4" : "px-6 py-4")}>
+                    {sidebarCollapsed && !isMobileSidebarOpen ? (
+                        /* Collapsed: expand button in logo area */
+                        <button
+                            onClick={toggleSidebarCollapsed}
+                            className="hidden md:flex w-full items-center justify-center p-2 rounded-lg text-primary-600 dark:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            title="Expand sidebar"
+                        >
+                            <PanelLeftOpen className="h-5 w-5" />
+                        </button>
+                    ) : (
+                        <>
+                            <div className="flex items-center justify-center overflow-hidden">
+                                <Logo className="h-40 text-black dark:text-white" />
+                            </div>
+                            <button
+                                onClick={toggleSidebarCollapsed}
+                                className="hidden md:flex absolute top-3 right-3 items-center justify-center p-1 rounded text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors"
+                                title="Collapse sidebar"
+                            >
+                                <Menu className="h-4 w-4" />
+                            </button>
+                        </>
+                    )}
                     {/* Mobile close button */}
                     <button
                         onClick={() => setIsMobileSidebarOpen(false)}
@@ -384,7 +415,7 @@ export function Layout() {
                     </button>
                 </div>
                 {/* Navigation - filtered by user role */}
-                <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                <nav className={clsx("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1.5" : "px-3")}>
                     {NAVIGATION
                         .filter((item) => {
                             // SuperAdmin-only items
@@ -406,97 +437,129 @@ export function Layout() {
                             // Check if user has the required permission
                             return hasPermission(item.permission);
                         })
-                        .map((item) => (
+                        .map((item) => {
+                            const isCollapsed = sidebarCollapsed && !isMobileSidebarOpen;
+                            return (
                             <NavLink
                                 key={item.name}
                                 to={item.href}
                                 onClick={() => setIsMobileSidebarOpen(false)}
+                                title={isCollapsed ? item.name : undefined}
                                 className={({ isActive }) =>
                                     clsx(
-                                        "flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px]",
+                                        "flex items-center py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px]",
+                                        isCollapsed ? "justify-center px-2 relative" : "px-3",
                                         isActive
                                             ? "bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400"
                                             : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
                                     )
                                 }
                             >
-                                <item.icon className={clsx("mr-3 h-5 w-5 flex-shrink-0")} />
-                                <span className="flex-1">{item.name}</span>
-                                {item.name === 'Security' && securityAlertCount > 0 && (
+                                <item.icon className={clsx("h-5 w-5 flex-shrink-0", !isCollapsed && "mr-3")} />
+                                {!isCollapsed && <span className="flex-1">{item.name}</span>}
+                                {!isCollapsed && item.name === 'Security' && securityAlertCount > 0 && (
                                     <span className="ml-2 px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full">
                                         {securityAlertCount > 99 ? '99+' : securityAlertCount}
                                     </span>
                                 )}
+                                {isCollapsed && item.name === 'Security' && securityAlertCount > 0 && (
+                                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                                )}
                             </NavLink>
-                        ))}
+                            );
+                        })}
 
 {/* Extension Sidebar Items */}
                     {uiComponents.sidebar.length > 0 && (
                         <>
                             <div className="my-3 border-t border-gray-200 dark:border-gray-700" />
-                            <p className="px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-                                Extensions
-                            </p>
-                            {uiComponents.sidebar.map((item) => (
+                            {!(sidebarCollapsed && !isMobileSidebarOpen) && (
+                                <p className="px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                                    Extensions
+                                </p>
+                            )}
+                            {uiComponents.sidebar.map((item) => {
+                                const isCollapsed = sidebarCollapsed && !isMobileSidebarOpen;
+                                return (
                                 <button
                                     key={item.id}
                                     onClick={() => { setActiveExtensionPanel(item.id); setIsMobileSidebarOpen(false); }}
+                                    title={isCollapsed ? item.name : undefined}
                                     className={clsx(
-                                        "w-full flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px]",
+                                        "w-full flex items-center py-3 text-sm font-medium rounded-lg transition-colors min-h-[44px]",
+                                        isCollapsed ? "justify-center px-2" : "px-3",
                                         activeExtensionPanel === item.id
                                             ? "bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400"
                                             : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
                                     )}
                                 >
                                     {item.icon ? (
-                                        <img src={item.icon} alt="" className="mr-3 h-5 w-5 flex-shrink-0" />
+                                        <img src={item.icon} alt="" className={clsx("h-5 w-5 flex-shrink-0", !isCollapsed && "mr-3")} />
                                     ) : (
-                                        <Puzzle className="mr-3 h-5 w-5 flex-shrink-0" />
+                                        <Puzzle className={clsx("h-5 w-5 flex-shrink-0", !isCollapsed && "mr-3")} />
                                     )}
-                                    {item.name}
+                                    {!isCollapsed && item.name}
                                 </button>
-                            ))}
+                                );
+                            })}
                         </>
                     )}
                 </nav>
 
-                {/* Keyboard Shortcuts Help Button */}
-                <div className="px-3 pb-2">
-                    <button
-                        onClick={toggleHelp}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors border border-gray-200 dark:border-gray-600"
-                        title="Show keyboard shortcuts (press ? anytime)"
-                    >
-                        <HelpCircle className="h-4 w-4" />
-                        <span>Shortcuts</span>
-                    </button>
-                </div>
-
-                <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700">
-                        <Avatar 
-                            src={user?.avatar_url} 
-                            name={user?.name || 'User'} 
-                            size="md"
-                        />
-                        <div className="ml-3 min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
-                            <NavLink 
-                                to="/profile" 
-                                onClick={() => setIsMobileSidebarOpen(false)}
-                                className="text-xs text-gray-500 dark:text-gray-400 truncate hover:text-primary-600 dark:hover:text-primary-400 block"
-                            >
-                                {user?.role || 'Role'}
-                            </NavLink>
-                        </div>
+                {/* Shortcuts */}
+                {!(sidebarCollapsed && !isMobileSidebarOpen) && (
+                    <div className={clsx("pb-2", sidebarCollapsed ? "px-1.5" : "px-3")}>
                         <button
-                            onClick={logout}
-                            className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                            title="Logout"
+                            onClick={toggleHelp}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors border border-gray-200 dark:border-gray-600"
+                            title="Show keyboard shortcuts (press ? anytime)"
                         >
-                            <LogOut className="h-5 w-5" />
+                            <HelpCircle className="h-4 w-4" />
+                            <span>Shortcuts</span>
                         </button>
                     </div>
+                )}
+
+                <div className={clsx("border-t border-gray-200 dark:border-gray-700", sidebarCollapsed && !isMobileSidebarOpen ? "p-1.5" : "p-3")}>
+                    {sidebarCollapsed && !isMobileSidebarOpen ? (
+                        <NavLink
+                            to="/profile"
+                            onClick={() => setIsMobileSidebarOpen(false)}
+                            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                            title={user?.name || 'User'}
+                        >
+                            <Avatar
+                                src={user?.avatar_url}
+                                name={user?.name || 'User'}
+                                size="sm"
+                            />
+                        </NavLink>
+                    ) : (
+                        <div className="flex items-center p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700">
+                            <Avatar
+                                src={user?.avatar_url}
+                                name={user?.name || 'User'}
+                                size="md"
+                            />
+                            <div className="ml-3 min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.name || 'User'}</p>
+                                <NavLink
+                                    to="/profile"
+                                    onClick={() => setIsMobileSidebarOpen(false)}
+                                    className="text-xs text-gray-500 dark:text-gray-400 truncate hover:text-primary-600 dark:hover:text-primary-400 block"
+                                >
+                                    {user?.role || 'Role'}
+                                </NavLink>
+                            </div>
+                            <button
+                                onClick={logout}
+                                className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                title="Logout"
+                            >
+                                <LogOut className="h-5 w-5" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </aside>
 
@@ -696,7 +759,7 @@ export function Layout() {
                     <div className="flex-1 p-8">
                         <Outlet />
                     </div>
-                    <Footer />
+                    <Footer collapsed={sidebarCollapsed} />
                 </div>
                 
                 {/* Extension Panel Overlay */}

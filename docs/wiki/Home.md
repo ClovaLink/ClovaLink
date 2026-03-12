@@ -34,6 +34,10 @@ ClovaLink provides secure file storage, sharing, and compliance features for org
 - **S3 Replication** - Async backup/mirror to secondary bucket for DR
 - **File Groups** - Organize files into virtual collections without moving them
 - **Company Folders** - Shared folders visible to all departments
+- **Resizable Columns** - Drag column borders to resize in list view, double-click to reset
+- **Display Density** - Compact, Normal, and Comfortable row sizing modes
+- **Items-per-Page** - Choose Auto, 10, 25, 50, or 100 items per page
+- **Per-User Preferences** - View mode, density, column widths, and pagination saved per user
 
 ### AI Features
 - **Document Summarization** - AI-generated summaries for PDFs, Word, and text files
@@ -57,7 +61,8 @@ ClovaLink provides secure file storage, sharing, and compliance features for org
 - **Audit Logging** - Complete activity trails for compliance
 - **GDPR Tools** - Data export and deletion request handling
 - **Single Sign-On** - OIDC and SAML 2.0 with auto-provisioning and attribute mapping
-- **Document Approval** - Policy-based approval workflow with notifications
+- **Document Approval** - Policy-based approval workflow with card-based UI, bulk actions, and filtering
+- **Backup & Restore** - Encrypted full-instance backup with ChaCha20-Poly1305 + Argon2id, BACKUP_MASTER_KEY required for scheduled auto-backups
 
 ### User Management
 - **Role-Based Access Control (RBAC)** - Four base roles with customization
@@ -132,6 +137,7 @@ Password: password123
 | [File Groups](File-Groups) | Organize files into virtual collections |
 | [SSO Authentication](SSO-Authentication) | OIDC and SAML 2.0 single sign-on |
 | [Document Approval](Document-Approval) | Policy-based document approval workflows |
+| [Backup & Restore](Backup-Restore) | Encrypted backup, import, and settings profiles |
 
 ## Tech Stack
 
@@ -167,5 +173,5 @@ ClovaLink is open source software licensed under the MIT License.
 
 ---
 
-*ClovaLink v0.1.5 - An open source project*
+*ClovaLink v0.1.6 - An open source project*
 

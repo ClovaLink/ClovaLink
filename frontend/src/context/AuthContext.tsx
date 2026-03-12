@@ -27,6 +27,7 @@ interface Tenant {
     retention_policy_days?: number;
     data_export_enabled?: boolean;
     approval_workflow_enabled?: boolean;
+    backup_enabled?: boolean;
 }
 
 interface AuthContextType {

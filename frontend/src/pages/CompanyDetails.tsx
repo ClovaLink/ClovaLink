@@ -24,7 +24,8 @@ import {
     AlertTriangle,
     Ban,
     Play,
-    Edit2
+    Edit2,
+    Download
 } from 'lucide-react';
 import { useAuthFetch, useAuth } from '../context/AuthContext';
 import { useGlobalSettings } from '../context/GlobalSettingsContext';
@@ -36,6 +37,7 @@ import { LockedToggle } from '../components/LockedField';
 import { TenantEmailTemplates } from '../components/TenantEmailTemplates';
 import { TenantAiSettings } from '../components/TenantAiSettings';
 import { TenantDiscordSettings } from '../components/TenantDiscordSettings';
+import { BackupRestore } from '../components/BackupRestore';
 import clsx from 'clsx';
 
 interface Tenant {
@@ -65,6 +67,7 @@ interface Tenant {
     public_sharing_enabled?: boolean;
     auth_methods?: string[];
     approval_workflow_enabled?: boolean;
+    backup_enabled?: boolean;
 }
 
 interface Department {
@@ -84,7 +87,7 @@ export function CompanyDetails() {
     const [company, setCompany] = useState<Tenant | null>(null);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates' | 'ai' | 'discord' | 'document-workflow'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'settings' | 'departments' | 'users' | 'audit' | 'notifications' | 'email-templates' | 'ai' | 'discord' | 'document-workflow' | 'backup'>('overview');
     
     // Notification settings state
     const [notificationSettings, setNotificationSettings] = useState<any[]>([]);
@@ -762,7 +765,10 @@ export function CompanyDetails() {
             {/* Tabs */}
             <div className="border-b border-gray-200 dark:border-gray-700">
                 <nav className="-mb-px flex space-x-8 overflow-x-auto">
-                    {['overview', 'settings', 'departments', 'users', 'document-workflow', 'notifications', 'email-templates', 'ai', 'discord', 'audit'].map((tab) => (
+                    {['overview', 'settings', 'departments', 'users', 'document-workflow', 'notifications', 'email-templates', 'ai', 'discord', 'audit', 'backup'].filter((tab) => {
+                        if (tab === 'backup' && company?.backup_enabled === false && currentUser?.role !== 'SuperAdmin') return false;
+                        return true;
+                    }).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab as any)}
@@ -773,7 +779,7 @@ export function CompanyDetails() {
                                     : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                             )}
                         >
-                            {tab === 'audit' ? 'Audit Settings' : tab === 'ai' ? 'AI' : tab === 'document-workflow' ? 'Document Workflow' : tab === 'email-templates' ? 'Email-templates' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                            {tab === 'audit' ? 'Audit Settings' : tab === 'ai' ? 'AI' : tab === 'document-workflow' ? 'Document Workflow' : tab === 'email-templates' ? 'Email-templates' : tab === 'backup' ? 'Backup & Restore' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                         </button>
                     ))}
                 </nav>
@@ -864,7 +870,7 @@ export function CompanyDetails() {
                 )}
 
                 {activeTab === 'settings' && (
-                    <div className="max-w-2xl space-y-6">
+                    <div className="max-w-6xl mx-auto space-y-6">
                         {/* Compliance Banner */}
                         {editCompliance && editCompliance !== 'none' && editCompliance !== 'Standard' && (
                             <ComplianceBanner mode={editCompliance} />
@@ -1902,7 +1908,7 @@ export function CompanyDetails() {
                 )}
 
                 {activeTab === 'notifications' && (
-                    <div className="max-w-3xl space-y-6">
+                    <div className="max-w-6xl mx-auto space-y-6">
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">
@@ -2136,7 +2142,7 @@ export function CompanyDetails() {
                 )}
 
                 {activeTab === 'document-workflow' && company && (
-                    <div className="max-w-3xl space-y-6">
+                    <div className="max-w-6xl mx-auto space-y-6">
                         {/* Enable/Disable Card */}
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                             <div className="flex items-center justify-between">
@@ -2483,8 +2489,56 @@ export function CompanyDetails() {
                     </div>
                 )}
 
+                {activeTab === 'backup' && company && (
+                    <div className="space-y-6">
+                        {/* Backup Enable/Disable Toggle */}
+                        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">Backup & Restore</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                        Enable backup and restore functionality for this tenant
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        const newVal = !(company.backup_enabled !== false);
+                                        try {
+                                            const endpoint = currentUser?.role === 'SuperAdmin'
+                                                ? `/api/tenants/${company.id}`
+                                                : `/api/tenants/${company.id}/edit`;
+                                            const method = 'PUT';
+                                            await authFetch(endpoint, {
+                                                method,
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ backup_enabled: newVal }),
+                                            });
+                                            setCompany({ ...company, backup_enabled: newVal });
+                                        } catch (err) {
+                                            console.error('Failed to toggle backup:', err);
+                                        }
+                                    }}
+                                    className={clsx(
+                                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
+                                        company.backup_enabled !== false ? "bg-primary-600" : "bg-gray-200 dark:bg-gray-600"
+                                    )}
+                                >
+                                    <span className={clsx(
+                                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                        company.backup_enabled !== false ? "translate-x-5" : "translate-x-0"
+                                    )} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {company.backup_enabled !== false && (
+                            <BackupRestore type="tenant" tenantId={company.id} />
+                        )}
+                    </div>
+                )}
+
                 {activeTab === 'audit' && (
-                    <div className="max-w-2xl space-y-6">
+                    <div className="max-w-6xl mx-auto space-y-6">
                         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                                 <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">

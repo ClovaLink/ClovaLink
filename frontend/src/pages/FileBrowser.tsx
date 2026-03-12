@@ -5,7 +5,7 @@ import {
     Trash2, Eye, EyeOff, Upload, Grid, List, Search, Plus, Star, Clock,
     FolderPlus, Edit2, Edit3, Link as LinkIcon, ChevronLeft, ChevronRight, ChevronDown,
     Lock, Unlock, History, FileOutput, Move, Home, Users, CheckSquare, Square, X,
-    Building2, MoreHorizontal, Clipboard, Layers, ArrowUpDown
+    Building2, MoreHorizontal, Clipboard, Layers, ArrowUpDown, Rows3
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CreateFileRequestModal, FileRequestData } from '../components/CreateFileRequestModal';
@@ -27,6 +27,7 @@ import { FileGroupViewer } from '../components/FileGroupViewer';
 import { Avatar } from '../components/Avatar';
 import { useTenant } from '../context/TenantContext';
 import { useAuth, useAuthFetch } from '../context/AuthContext';
+import { useGlobalSettings } from '../context/GlobalSettingsContext';
 import { useKeyboardShortcuts, Shortcut } from '../hooks/useKeyboardShortcuts';
 import { useKeyboardShortcutsContext } from '../context/KeyboardShortcutsContext';
 import { ShortcutActionId } from '../hooks/shortcutPresets';
@@ -93,7 +94,12 @@ interface UserPrefs {
 }
 
 export function FileBrowser() {
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    const { user } = useAuth();
+    const viewModeKey = `file-view-mode-${user?.id ?? 'default'}`;
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+        const saved = localStorage.getItem(`file-view-mode-${user?.id ?? 'default'}`);
+        return saved === 'list' ? 'list' : 'grid';
+    });
     const [currentPath, setCurrentPath] = useState<string[]>(['Home']);
     const [files, setFiles] = useState<FileItem[]>([]);
     const [starredFiles, setStarredFiles] = useState<string[]>([]);
@@ -119,7 +125,81 @@ export function FileBrowser() {
     // Sort menu dropdown
     const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
     const sortMenuRef = useRef<HTMLDivElement>(null);
+
+    // Items per page menu
+    const [isPerPageMenuOpen, setIsPerPageMenuOpen] = useState(false);
+    const perPageMenuRef = useRef<HTMLDivElement>(null);
+    const perPageKey = `file-per-page-${user?.id ?? 'default'}`;
+    const [itemsPerPageOverride, setItemsPerPageOverride] = useState<number | null>(() => {
+        const saved = localStorage.getItem(`file-per-page-${user?.id ?? 'default'}`);
+        return saved ? parseInt(saved, 10) : null;
+    });
     
+    // Display density (list view)
+    const densityKey = `file-density-${user?.id ?? 'default'}`;
+    const [density, setDensity] = useState<'compact' | 'default' | 'comfortable'>(() => {
+        const saved = localStorage.getItem(`file-density-${user?.id ?? 'default'}`);
+        return (saved === 'compact' || saved === 'comfortable') ? saved : 'default';
+    });
+    const densityStyles = {
+        compact: { cellPy: 'py-1', iconSize: 'h-6 w-6', textSize: 'text-xs', rowHeight: 32 },
+        default: { cellPy: 'py-2.5', iconSize: 'h-8 w-8', textSize: 'text-sm', rowHeight: 45 },
+        comfortable: { cellPy: 'py-4', iconSize: 'h-10 w-10', textSize: 'text-sm', rowHeight: 60 },
+    };
+    const ds = densityStyles[density];
+
+    // Resizable column widths (list view)
+    const colWidthsKey = `file-col-widths-${user?.id ?? 'default'}`;
+    const defaultColWidths = { size: 80, modified: 220, owner: 160 };
+    const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+        try {
+            const saved = localStorage.getItem(`file-col-widths-${user?.id ?? 'default'}`);
+            return saved ? { ...defaultColWidths, ...JSON.parse(saved) } : defaultColWidths;
+        } catch { return defaultColWidths; }
+    });
+    const resizingCol = useRef<string | null>(null);
+    const resizeStartX = useRef(0);
+    const resizeStartWidth = useRef(0);
+
+    const onResizeStart = (col: string, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resizingCol.current = col;
+        resizeStartX.current = e.clientX;
+        resizeStartWidth.current = colWidths[col];
+
+        const onMouseMove = (ev: MouseEvent) => {
+            const delta = ev.clientX - resizeStartX.current;
+            const newWidth = Math.max(50, resizeStartWidth.current + delta);
+            setColWidths(prev => {
+                const updated = { ...prev, [resizingCol.current!]: newWidth };
+                localStorage.setItem(colWidthsKey, JSON.stringify(updated));
+                return updated;
+            });
+        };
+        const onMouseUp = () => {
+            resizingCol.current = null;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    };
+
+    const onResizeReset = (col: string, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setColWidths(prev => {
+            const updated = { ...prev, [col]: defaultColWidths[col as keyof typeof defaultColWidths] };
+            localStorage.setItem(colWidthsKey, JSON.stringify(updated));
+            return updated;
+        });
+    };
+
     // Department filtering for admins
     const [departments, setDepartments] = useState<{id: string, name: string}[]>([]);
     const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
@@ -183,14 +263,54 @@ export function FileBrowser() {
     // Keyboard navigation state
     const [focusedFileIndex, setFocusedFileIndex] = useState<number>(-1);
 
-    // Dynamic items per page based on screen width
+    // Dynamic items per page — view-mode-aware
     const [itemsPerPage, setItemsPerPage] = useState(24);
+
+    useEffect(() => {
+        if (itemsPerPageOverride) {
+            setItemsPerPage(itemsPerPageOverride);
+            setCurrentPage(1);
+            return;
+        }
+
+        const calculate = () => {
+            if (viewMode === 'list') {
+                const rowHeight = ds.rowHeight;
+                const chrome = 280; // header + toolbar + breadcrumb + pagination
+                return Math.max(10, Math.floor((window.innerHeight - chrome) / rowHeight));
+            }
+            const width = window.innerWidth;
+            if (width >= 3200) return 64;
+            if (width >= 2800) return 56;
+            if (width >= 2200) return 48;
+            if (width >= 1800) return 40;
+            if (width >= 1536) return 32;
+            if (width >= 1280) return 24;
+            return 24;
+        };
+
+        setItemsPerPage(calculate());
+        setCurrentPage(1);
+
+        const handleResize = () => {
+            const newCount = calculate();
+            setItemsPerPage(prev => {
+                if (prev !== newCount) {
+                    setCurrentPage(1);
+                    return newCount;
+                }
+                return prev;
+            });
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [viewMode, itemsPerPageOverride, density]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const starredDropdownRef = useRef<HTMLDivElement>(null);
     const menuButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
     const { currentCompany } = useTenant();
-    const { user } = useAuth();
+    const { formatDateTime } = useGlobalSettings();
     const companyId = currentCompany?.id;
     const [searchParams] = useSearchParams();
     const urlPath = searchParams.get('path');
@@ -203,26 +323,6 @@ export function FileBrowser() {
             setCurrentPath(['Home', ...pathParts]);
         }
     }, [urlPath]);
-
-    // Calculate items per page based on screen width for responsive pagination
-    useEffect(() => {
-        const calculateItemsPerPage = () => {
-            const width = window.innerWidth;
-            if (width >= 3200) return 64;      // 16 cols x 4 rows
-            if (width >= 2800) return 56;      // 14 cols x 4 rows
-            if (width >= 2200) return 48;      // 12 cols x 4 rows
-            if (width >= 1800) return 40;      // 10 cols x 4 rows
-            if (width >= 1536) return 32;      // 8 cols x 4 rows (2xl)
-            if (width >= 1280) return 24;      // 6 cols x 4 rows (xl)
-            return 24;                          // default
-        };
-        
-        setItemsPerPage(calculateItemsPerPage());
-        
-        const handleResize = () => setItemsPerPage(calculateItemsPerPage());
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     // Fetch departments for filtering
     // For admins: show all departments
@@ -290,6 +390,9 @@ export function FileBrowser() {
             }
             if (sortMenuRef.current && !sortMenuRef.current.contains(event.target as Node)) {
                 setIsSortMenuOpen(false);
+            }
+            if (perPageMenuRef.current && !perPageMenuRef.current.contains(event.target as Node)) {
+                setIsPerPageMenuOpen(false);
             }
         };
         document.addEventListener('click', handleClickOutside);
@@ -2835,16 +2938,77 @@ export function FileBrowser() {
                             )}
                         </div>
                         
+                        {/* Items per page */}
+                        <div className="relative" ref={perPageMenuRef}>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setIsPerPageMenuOpen(!isPerPageMenuOpen); }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                                title="Items per page"
+                            >
+                                <Rows3 className="w-4 h-4" />
+                                <span className="hidden sm:inline">
+                                    {itemsPerPageOverride ?? 'Auto'}
+                                </span>
+                            </button>
+                            {isPerPageMenuOpen && (
+                                <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-1 ring-1 ring-black ring-opacity-5 z-50 border border-gray-200 dark:border-gray-700">
+                                    {([null, 10, 25, 50, 100] as (number | null)[]).map((count) => (
+                                        <button
+                                            key={count ?? 'auto'}
+                                            onClick={() => {
+                                                setItemsPerPageOverride(count);
+                                                if (count) {
+                                                    localStorage.setItem(perPageKey, String(count));
+                                                } else {
+                                                    localStorage.removeItem(perPageKey);
+                                                }
+                                                setCurrentPage(1);
+                                                setIsPerPageMenuOpen(false);
+                                            }}
+                                            className={clsx(
+                                                "w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700",
+                                                (count === itemsPerPageOverride || (count === null && !itemsPerPageOverride))
+                                                    ? "text-primary-600 dark:text-primary-400 font-medium"
+                                                    : "text-gray-700 dark:text-gray-300"
+                                            )}
+                                        >
+                                            {count ?? 'Auto'}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Density toggle (list view only) */}
+                        {viewMode === 'list' && (
+                            <button
+                                onClick={() => {
+                                    const next = density === 'compact' ? 'default' : density === 'default' ? 'comfortable' : 'compact';
+                                    setDensity(next);
+                                    localStorage.setItem(densityKey, next);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                                title={`Density: ${density} (click to cycle)`}
+                            >
+                                <span className="hidden sm:inline text-xs capitalize">{density === 'default' ? 'Normal' : density}</span>
+                                <div className="flex flex-col gap-px">
+                                    <div className={clsx("rounded-sm bg-current", density === 'compact' ? "w-3.5 h-px" : density === 'default' ? "w-3.5 h-0.5" : "w-3.5 h-1")} />
+                                    <div className={clsx("rounded-sm bg-current", density === 'compact' ? "w-3.5 h-px" : density === 'default' ? "w-3.5 h-0.5" : "w-3.5 h-1")} />
+                                    <div className={clsx("rounded-sm bg-current", density === 'compact' ? "w-3.5 h-px" : density === 'default' ? "w-3.5 h-0.5" : "w-3.5 h-1")} />
+                                </div>
+                            </button>
+                        )}
+
                         <div className="border-l border-gray-300 dark:border-gray-600 h-6 hidden sm:block" />
                         <div className="flex space-x-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
                             <button
-                                onClick={() => setViewMode('grid')}
+                                onClick={() => { setViewMode('grid'); localStorage.setItem(viewModeKey, 'grid'); }}
                                 className={clsx("p-1.5 rounded-md transition-all", viewMode === 'grid' ? "bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200")}
                             >
                                 <Grid className="w-4 h-4" />
                             </button>
                             <button
-                                onClick={() => setViewMode('list')}
+                                onClick={() => { setViewMode('list'); localStorage.setItem(viewModeKey, 'list'); }}
                                 className={clsx("p-1.5 rounded-md transition-all", viewMode === 'list' ? "bg-white dark:bg-gray-600 shadow-sm text-primary-600 dark:text-primary-400" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200")}
                             >
                                 <List className="w-4 h-4" />
@@ -3138,8 +3302,8 @@ export function FileBrowser() {
                             ))}
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead className="bg-gray-50 dark:bg-gray-900/50">
                                     <tr>
                                         {isSelectionMode && (
@@ -3163,7 +3327,7 @@ export function FileBrowser() {
                                             </th>
                                         )}
                                         <th
-                                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                            className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                                             onClick={() => handleSort('name')}
                                         >
                                             <div className="flex items-center">
@@ -3172,25 +3336,53 @@ export function FileBrowser() {
                                             </div>
                                         </th>
                                         <th
-                                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                            className="relative px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                            style={{ width: colWidths.size }}
                                             onClick={() => handleSort('size')}
                                         >
                                             <div className="flex items-center">
                                                 Size
                                                 {sortBy === 'size' && (sortOrder === 'asc' ? <span className="ml-1">↑</span> : <span className="ml-1">↓</span>)}
                                             </div>
+                                            <div
+                                                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary-400/50 active:bg-primary-500 z-10 group"
+                                                onMouseDown={(e) => onResizeStart('size', e)}
+                                                onDoubleClick={(e) => onResizeReset('size', e)}
+                                            >
+                                                <div className="absolute right-0 top-1/4 bottom-1/4 w-px bg-gray-300 dark:bg-gray-600 group-hover:bg-primary-400" />
+                                            </div>
                                         </th>
                                         <th
-                                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                            className="relative px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                                            style={{ width: colWidths.modified }}
                                             onClick={() => handleSort('modified')}
                                         >
                                             <div className="flex items-center">
                                                 Modified
                                                 {sortBy === 'modified' && (sortOrder === 'asc' ? <span className="ml-1">↑</span> : <span className="ml-1">↓</span>)}
                                             </div>
+                                            <div
+                                                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary-400/50 active:bg-primary-500 z-10 group"
+                                                onMouseDown={(e) => onResizeStart('modified', e)}
+                                                onDoubleClick={(e) => onResizeReset('modified', e)}
+                                            >
+                                                <div className="absolute right-0 top-1/4 bottom-1/4 w-px bg-gray-300 dark:bg-gray-600 group-hover:bg-primary-400" />
+                                            </div>
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">Owner</th>
-                                        <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                                        <th
+                                            className="relative px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell"
+                                            style={{ width: colWidths.owner }}
+                                        >
+                                            Owner
+                                            <div
+                                                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary-400/50 active:bg-primary-500 z-10 group"
+                                                onMouseDown={(e) => onResizeStart('owner', e)}
+                                                onDoubleClick={(e) => onResizeReset('owner', e)}
+                                            >
+                                                <div className="absolute right-0 top-1/4 bottom-1/4 w-px bg-gray-300 dark:bg-gray-600 group-hover:bg-primary-400" />
+                                            </div>
+                                        </th>
+                                        <th className="relative px-4 py-2.5 w-[48px]"><span className="sr-only">Actions</span></th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -3225,7 +3417,7 @@ export function FileBrowser() {
                                             }}
                                         >
                                             {isSelectionMode && (
-                                                <td className="px-4 py-4 w-10">
+                                                <td className="px-4 py-2.5 w-10">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); toggleFileSelection(file.id); }}
                                                         className="text-gray-400 hover:text-primary-500"
@@ -3238,7 +3430,7 @@ export function FileBrowser() {
                                                     </button>
                                                 </td>
                                             )}
-                                            <td className="px-6 py-4 whitespace-nowrap cursor-pointer" onClick={(e) => {
+                                            <td className={clsx("px-4 overflow-hidden cursor-pointer", ds.cellPy)} onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (isSelectionMode) return;
                                                 if (file.type === 'group') {
@@ -3249,46 +3441,46 @@ export function FileBrowser() {
                                                     handlePreview(file);
                                                 }
                                             }}>
-                                                <div className="flex items-center">
-                                                    <div className="flex-shrink-0 h-8 w-8 flex items-center justify-center">
+                                                <div className="flex items-center min-w-0">
+                                                    <div className={clsx("flex-shrink-0 flex items-center justify-center", ds.iconSize)}>
                                                         {getIcon(file)}
                                                     </div>
-                                                    <div className="ml-4">
-                                                        <div className="text-sm font-medium text-gray-900 dark:text-white flex items-center">
-                                                            {file.name}
-                                                            {file.visibility === 'private' && <span title="Private"><EyeOff className="w-3.5 h-3.5 ml-2 text-purple-500" /></span>}
-                                                            {file.is_locked && <span title="Locked"><Lock className="w-3.5 h-3.5 ml-1 text-orange-500" /></span>}
-                                                            {file.approval_status === 'pending' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded">Pending</span>}
-                                                            {file.approval_status === 'rejected' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded">Rejected</span>}
+                                                    <div className="ml-4 min-w-0">
+                                                        <div className={clsx(ds.textSize, "font-medium text-gray-900 dark:text-white flex items-center min-w-0")} title={file.name}>
+                                                            <span className="truncate">{file.name}</span>
+                                                            {file.visibility === 'private' && <span title="Private" className="flex-shrink-0"><EyeOff className="w-3.5 h-3.5 ml-2 text-purple-500" /></span>}
+                                                            {file.is_locked && <span title="Locked" className="flex-shrink-0"><Lock className="w-3.5 h-3.5 ml-1 text-orange-500" /></span>}
+                                                            {file.approval_status === 'pending' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 rounded flex-shrink-0">Pending</span>}
+                                                            {file.approval_status === 'rejected' && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded flex-shrink-0">Rejected</span>}
                                                         </div>
-                                                        <div className="sm:hidden text-xs text-gray-500 dark:text-gray-400">{file.size} • {file.modified}</div>
+                                                        <div className="sm:hidden text-xs text-gray-500 dark:text-gray-400">{file.size} • {formatDateTime(file.modified)}</div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
+                                            <td className={clsx("px-4 whitespace-nowrap text-gray-500 dark:text-gray-400 hidden sm:table-cell", ds.cellPy, ds.textSize)} style={{ width: colWidths.size }}>
                                                 {file.size}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell">
-                                                {file.modified}
+                                            <td className={clsx("px-4 whitespace-nowrap overflow-hidden text-ellipsis text-gray-500 dark:text-gray-400 hidden md:table-cell", ds.cellPy, ds.textSize)} style={{ width: colWidths.modified }}>
+                                                {formatDateTime(file.modified)}
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
-                                                <div className="flex items-center" title={(file.type === 'folder' && file.is_company_folder) || isInsideCompanyFolder ? 'Company' : (file.owner || 'Unknown')}>
+                                            <td className={clsx("px-4 whitespace-nowrap text-gray-500 dark:text-gray-400 hidden lg:table-cell", ds.cellPy, ds.textSize)} style={{ width: colWidths.owner }}>
+                                                <div className="flex items-center min-w-0" title={(file.type === 'folder' && file.is_company_folder) || isInsideCompanyFolder ? 'Company' : (file.owner || 'Unknown')}>
                                                     {(file.type === 'folder' && file.is_company_folder) || isInsideCompanyFolder ? (
-                                                        <div className="h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center mr-2">
+                                                        <div className="flex-shrink-0 h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center mr-2">
                                                             <Building2 className="w-3 h-3 text-gray-600 dark:text-gray-300" />
                                                         </div>
                                                     ) : (
-                                                        <Avatar 
-                                                            src={file.owner_avatar} 
-                                                            name={file.owner || 'Unknown'} 
+                                                        <Avatar
+                                                            src={file.owner_avatar}
+                                                            name={file.owner || 'Unknown'}
                                                             size="xs"
-                                                            className="mr-2"
+                                                            className="mr-2 flex-shrink-0"
                                                         />
                                                     )}
-                                                    <span>{(file.type === 'folder' && file.is_company_folder) || isInsideCompanyFolder ? 'Company' : (file.owner || 'Unknown')}</span>
+                                                    <span className="truncate">{(file.type === 'folder' && file.is_company_folder) || isInsideCompanyFolder ? 'Company' : (file.owner || 'Unknown')}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative">
+                                            <td className={clsx("px-4 whitespace-nowrap text-right font-medium relative", ds.cellPy, ds.textSize)}>
                                                 <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
                                                         ref={(el) => { if (el) menuButtonRefs.current.set(`list-${file.id}`, el); }}

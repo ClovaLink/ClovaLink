@@ -211,7 +211,9 @@ export default function Performance() {
   const [errorsPerPage] = useState(20);
   const [errorsLoading, setErrorsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'endpoints' | 'tenants' | 'errors'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'endpoints' | 'tenants' | 'errors' | 'backups'>('overview');
+  const [backupMetrics, setBackupMetrics] = useState<any>(null);
+  const [backupMetricsLoading, setBackupMetricsLoading] = useState(false);
 
   const getTimeRangeParams = useCallback(() => {
     const now = new Date();
@@ -328,6 +330,18 @@ export default function Performance() {
   useEffect(() => {
     setErrorsPage(1);
   }, [timeRange]);
+
+  // Fetch backup metrics when switching to backups tab
+  useEffect(() => {
+    if (activeTab === 'backups') {
+      setBackupMetricsLoading(true);
+      authFetch('/api/backup/metrics')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => setBackupMetrics(data))
+        .catch(() => {})
+        .finally(() => setBackupMetricsLoading(false));
+    }
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -679,6 +693,7 @@ export default function Performance() {
             { id: 'endpoints', label: 'Endpoints', icon: Activity },
             { id: 'tenants', label: 'Tenants', icon: Building2 },
             { id: 'errors', label: 'Errors', icon: AlertTriangle, count: summary?.total_errors || 0 },
+            { id: 'backups', label: 'Backups', icon: HardDrive },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -1146,6 +1161,144 @@ export default function Performance() {
                   Last
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === BACKUPS TAB === */}
+      {activeTab === 'backups' && (
+        <div className="space-y-6">
+          {backupMetricsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : backupMetrics ? (
+            <>
+              {/* Status Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Circuit Breaker</div>
+                  <div className="flex items-center gap-2">
+                    <span className={clsx(
+                      "w-2.5 h-2.5 rounded-full",
+                      backupMetrics.circuit_breaker?.state === 'closed' && "bg-green-500",
+                      backupMetrics.circuit_breaker?.state === 'half_open' && "bg-yellow-500",
+                      backupMetrics.circuit_breaker?.state === 'open' && "bg-red-500",
+                    )} />
+                    <span className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+                      {backupMetrics.circuit_breaker?.state?.replace('_', ' ') || 'Unknown'}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Total Backups</div>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {backupMetrics.total_backups || 0}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {backupMetrics.total_auto_backups || 0} auto / {backupMetrics.total_manual_backups || 0} manual
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Failed (24h)</div>
+                  <div className={clsx(
+                    "text-lg font-semibold",
+                    (backupMetrics.failed_backups_24h || 0) > 0 ? "text-red-600" : "text-gray-900 dark:text-white"
+                  )}>
+                    {backupMetrics.failed_backups_24h || 0}
+                  </div>
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Storage Used</div>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {backupMetrics.total_storage_bytes
+                      ? (backupMetrics.total_storage_bytes / (1024 * 1024)).toFixed(1) + ' MB'
+                      : '0 B'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Concurrency Info */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Concurrency</h4>
+                <div className="flex items-center gap-6 text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Max: <span className="font-mono text-gray-900 dark:text-white">{backupMetrics.concurrency?.max}</span>
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Active: <span className="font-mono text-gray-900 dark:text-white">{backupMetrics.concurrency?.active}</span>
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Available: <span className="font-mono text-gray-900 dark:text-white">{backupMetrics.concurrency?.available}</span>
+                  </span>
+                  {backupMetrics.last_backup_at && (
+                    <span className="text-gray-500 dark:text-gray-400">
+                      Last: <span className="text-gray-900 dark:text-white">{new Date(backupMetrics.last_backup_at).toLocaleString()}</span>
+                      {backupMetrics.last_backup_duration_ms && ` (${backupMetrics.last_backup_duration_ms}ms)`}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Per-Tenant Table */}
+              {backupMetrics.by_tenant?.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white">Per-Tenant Backup Status</h4>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-900/50">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tenant</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Backups</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Last Backup</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Auto-Backup</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {backupMetrics.by_tenant.map((t: any, i: number) => (
+                          <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="px-4 py-2 text-gray-900 dark:text-white">{t.tenant_name}</td>
+                            <td className="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono">{t.backup_count}</td>
+                            <td className="px-4 py-2">
+                              {t.last_backup ? (
+                                <span className={clsx(
+                                  "text-xs",
+                                  // Red if last backup > 7 days ago
+                                  new Date(t.last_backup).getTime() < Date.now() - 7 * 24 * 60 * 60 * 1000
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-gray-600 dark:text-gray-400"
+                                )}>
+                                  {new Date(t.last_backup).toLocaleDateString()}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-400">Never</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2">
+                              <span className={clsx(
+                                "px-2 py-0.5 text-xs rounded-full",
+                                t.auto_enabled
+                                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
+                                  : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                              )}>
+                                {t.auto_enabled ? 'Enabled' : 'Disabled'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <HardDrive className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No backup metrics available. Only SuperAdmin can view this data.</p>
             </div>
           )}
         </div>

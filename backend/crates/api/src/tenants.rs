@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::Json,
     Extension,
 };
@@ -118,6 +118,10 @@ pub async fn list_tenants(
             "public_sharing_enabled": tenant.public_sharing_enabled,
             "data_export_enabled": tenant.data_export_enabled.unwrap_or(true),
             "approval_workflow_enabled": tenant.approval_workflow_enabled.unwrap_or(false),
+            "backup_enabled": tenant.backup_enabled.unwrap_or(true),
+            "auto_backup_enabled": tenant.auto_backup_enabled.unwrap_or(false),
+            "auto_backup_cron": tenant.auto_backup_cron.as_deref().unwrap_or("0 2 * * 0"),
+            "auto_backup_retention_count": tenant.auto_backup_retention_count.unwrap_or(5),
             "enable_totp": tenant.enable_totp,
             "auth_methods": tenant.auth_methods,
             "user_count": user_count,
@@ -208,6 +212,10 @@ pub async fn accessible_tenants(
             "retention_policy_days": tenant.retention_policy_days,
             "data_export_enabled": tenant.data_export_enabled.unwrap_or(true),
             "approval_workflow_enabled": tenant.approval_workflow_enabled.unwrap_or(false),
+            "backup_enabled": tenant.backup_enabled.unwrap_or(true),
+            "auto_backup_enabled": tenant.auto_backup_enabled.unwrap_or(false),
+            "auto_backup_cron": tenant.auto_backup_cron.as_deref().unwrap_or("0 2 * * 0"),
+            "auto_backup_retention_count": tenant.auto_backup_retention_count.unwrap_or(5),
             "enable_totp": tenant.enable_totp,
             "auth_methods": tenant.auth_methods,
             "is_primary": tenant.id == primary_tenant_id,
@@ -384,6 +392,25 @@ pub async fn update_tenant(
     }
     if let Some(_approval_workflow_enabled) = &input.approval_workflow_enabled {
         updates.push(format!("approval_workflow_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    if let Some(_backup_enabled) = &input.backup_enabled {
+        updates.push(format!("backup_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    if let Some(auto_backup_enabled) = &input.auto_backup_enabled {
+        if *auto_backup_enabled && !crate::settings_backup::is_master_key_configured() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        updates.push(format!("auto_backup_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    if let Some(_auto_backup_cron) = &input.auto_backup_cron {
+        updates.push(format!("auto_backup_cron = ${}", param_count));
+        param_count += 1;
+    }
+    if let Some(_auto_backup_retention_count) = &input.auto_backup_retention_count {
+        updates.push(format!("auto_backup_retention_count = ${}", param_count));
     }
 
     if updates.is_empty() {
@@ -452,6 +479,18 @@ pub async fn update_tenant(
     if let Some(approval_workflow_enabled) = input.approval_workflow_enabled {
         db_query = db_query.bind(approval_workflow_enabled);
     }
+    if let Some(backup_enabled) = input.backup_enabled {
+        db_query = db_query.bind(backup_enabled);
+    }
+    if let Some(auto_backup_enabled) = input.auto_backup_enabled {
+        db_query = db_query.bind(auto_backup_enabled);
+    }
+    if let Some(auto_backup_cron) = input.auto_backup_cron {
+        db_query = db_query.bind(auto_backup_cron);
+    }
+    if let Some(auto_backup_retention_count) = input.auto_backup_retention_count {
+        db_query = db_query.bind(auto_backup_retention_count);
+    }
 
     let tenant = db_query
         .fetch_optional(&state.pool)
@@ -493,6 +532,7 @@ pub async fn edit_my_company(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthUser>,
     Path(id): Path<Uuid>,
+    headers: HeaderMap,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<Json<Value>, StatusCode> {
     // Debug logging
@@ -611,6 +651,35 @@ pub async fn edit_my_company(
     // Handle approval_workflow_enabled field (Admins can toggle document approval)
     if let Some(_approval_workflow_enabled) = &input.approval_workflow_enabled {
         updates.push(format!("approval_workflow_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    // Handle backup_enabled field (Admins can toggle backup)
+    if let Some(_backup_enabled) = &input.backup_enabled {
+        updates.push(format!("backup_enabled = ${}", param_count));
+        param_count += 1;
+    }
+    // Handle auto_backup fields (SuperAdmin only, requires password confirmation)
+    let has_backup_changes = input.auto_backup_enabled.is_some()
+        || input.auto_backup_cron.is_some()
+        || input.auto_backup_retention_count.is_some();
+    if auth.role == "SuperAdmin" && has_backup_changes {
+        crate::settings_backup::verify_password_confirmation(&state.pool, auth.user_id, &headers).await?;
+    }
+    if auth.role == "SuperAdmin" {
+        if let Some(auto_backup_enabled) = &input.auto_backup_enabled {
+            if *auto_backup_enabled && !crate::settings_backup::is_master_key_configured() {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            updates.push(format!("auto_backup_enabled = ${}", param_count));
+            param_count += 1;
+        }
+        if let Some(_auto_backup_cron) = &input.auto_backup_cron {
+            updates.push(format!("auto_backup_cron = ${}", param_count));
+            param_count += 1;
+        }
+        if let Some(_auto_backup_retention_count) = &input.auto_backup_retention_count {
+            updates.push(format!("auto_backup_retention_count = ${}", param_count));
+        }
     }
 
     if updates.is_empty() {
@@ -676,6 +745,20 @@ pub async fn edit_my_company(
     }
     if let Some(approval_workflow_enabled) = input.approval_workflow_enabled {
         db_query = db_query.bind(approval_workflow_enabled);
+    }
+    if let Some(backup_enabled) = input.backup_enabled {
+        db_query = db_query.bind(backup_enabled);
+    }
+    if auth.role == "SuperAdmin" {
+        if let Some(auto_backup_enabled) = input.auto_backup_enabled {
+            db_query = db_query.bind(auto_backup_enabled);
+        }
+        if let Some(auto_backup_cron) = input.auto_backup_cron {
+            db_query = db_query.bind(auto_backup_cron);
+        }
+        if let Some(auto_backup_retention_count) = input.auto_backup_retention_count {
+            db_query = db_query.bind(auto_backup_retention_count);
+        }
     }
 
     let tenant = db_query

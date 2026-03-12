@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Eye, Download, Trash2, Star, Edit2, Share2,
     Lock, Unlock, History, Move, Info, Building2, Sparkles, MessageSquare, FileSearch, Copy,
-    Layers, FolderMinus, ChevronRight, Plus, Clock, XCircle, RefreshCw
+    Layers, FolderMinus, ChevronLeft, Plus, Clock, XCircle, RefreshCw
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -165,36 +165,48 @@ export function FileActionMenu({
     const isApproved = !file.approval_status || file.approval_status === 'approved';
     const isPendingOrRejected = file.approval_status === 'pending' || file.approval_status === 'rejected';
 
-    const [position, setPosition] = useState({ top: 0, right: 0 });
+    const [position, setPosition] = useState<{ top: number; right: number; maxHeight?: number } | null>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (buttonRef?.current) {
-            const rect = buttonRef.current.getBoundingClientRect();
-            // Calculate position - menu appears below button, aligned to right edge
-            const menuWidth = 192; // w-48 = 12rem = 192px
-            const menuHeight = 350; // approximate max height
-            
-            let top = rect.bottom + 8;
-            let right = window.innerWidth - rect.right;
-            
-            // Check if menu would go off-screen bottom
-            if (top + menuHeight > window.innerHeight) {
-                // Position above the button instead
-                top = rect.top - menuHeight - 8;
-                if (top < 0) top = 8; // Minimum top padding
-            }
-            
-            // Check if menu would go off-screen right
-            if (right < 8) right = 8;
-            
-            setPosition({ top, right });
-        }
+        if (!buttonRef?.current) return;
+        // Render off-screen first, then measure and reposition
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        let right = window.innerWidth - buttonRect.right;
+        if (right < 8) right = 8;
+
+        // Initial position off-screen to measure
+        setPosition({ top: -9999, right });
     }, [buttonRef]);
 
+    useEffect(() => {
+        if (!buttonRef?.current || !menuRef.current || position?.top !== -9999) return;
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        const menuHeight = menuRef.current.getBoundingClientRect().height;
+
+        let right = position.right;
+        let top = buttonRect.bottom + 8;
+        let maxHeight: number | undefined;
+
+        // If it overflows the bottom, position above
+        if (top + menuHeight > window.innerHeight) {
+            top = buttonRect.top - menuHeight - 8;
+        }
+
+        // If it still overflows the top, clamp and make scrollable
+        if (top < 8) {
+            top = 8;
+            maxHeight = window.innerHeight - 16;
+        }
+
+        setPosition({ top, right, maxHeight });
+    }, [position, buttonRef]);
+
     const menuContent = (
-        <div 
+        <div
+            ref={menuRef}
             className="fixed w-48 bg-white dark:bg-gray-800 rounded-md shadow-xl z-[100] border border-gray-100 dark:border-gray-700 ring-1 ring-black ring-opacity-5 text-left"
-            style={{ top: position.top, right: position.right }}
+            style={{ top: position?.top ?? 0, right: position?.right ?? 0, visibility: position && position.top !== -9999 ? 'visible' : 'hidden', maxHeight: position?.maxHeight, overflowY: position?.maxHeight ? 'auto' : undefined }}
         >
             <div className="py-1">
                 {/* Approval status banner */}
@@ -309,9 +321,9 @@ export function FileActionMenu({
                             <span className="flex items-center">
                                 <Layers className="w-4 h-4 mr-2 text-gray-400" /> Add to Group
                             </span>
-                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                            <ChevronLeft className="w-3 h-3 text-gray-400" />
                         </button>
-                        <div className="absolute left-full top-0 ml-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup:opacity-100 group-hover/addgroup:visible transition-all z-[60]">
+                        <div className="absolute right-full top-0 mr-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup:opacity-100 group-hover/addgroup:visible transition-all z-[60]">
                             {groups.map(g => (
                                 <button
                                     key={g.id}
@@ -506,9 +518,9 @@ export function FileActionMenu({
                             <span className="flex items-center">
                                 <Layers className="w-4 h-4 mr-2 text-gray-400" /> Add to Group
                             </span>
-                            <ChevronRight className="w-3 h-3 text-gray-400" />
+                            <ChevronLeft className="w-3 h-3 text-gray-400" />
                         </button>
-                        <div className="absolute left-full top-0 ml-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup2:opacity-100 group-hover/addgroup2:visible transition-all z-[60]">
+                        <div className="absolute right-full top-0 mr-0.5 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 opacity-0 invisible group-hover/addgroup2:opacity-100 group-hover/addgroup2:visible transition-all z-[60]">
                             {groups.map(g => (
                                 <button
                                     key={g.id}

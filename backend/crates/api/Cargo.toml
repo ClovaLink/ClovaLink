@@ -1,6 +1,6 @@
 [package]
 name = "clovalink_api"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [dependencies]
@@ -54,6 +54,12 @@ der = { version = "0.7", features = ["pem"] }
 pkcs8 = { version = "0.10", features = ["pem"] }
 base64 = "0.22"
 flate2 = "1"
+
+# Backup encryption (ChaCha20-Poly1305 - matches storage crate)
+chacha20poly1305 = "0.10"
+
+# Scheduled backup cron parsing
+cron = "0.13"
 
 # Text extraction for AI features
 pdf-extract = "0.7"

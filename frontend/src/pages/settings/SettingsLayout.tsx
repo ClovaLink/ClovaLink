@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Settings, Image, Shield, ShieldCheck, Building2, ArrowRight, BookOpen, Wrench, Mail, Keyboard, Globe } from 'lucide-react';
+import { Settings, Image, Shield, ShieldCheck, Building2, ArrowRight, BookOpen, Wrench, Mail, Keyboard, Globe, HardDrive } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import clsx from 'clsx';
 
@@ -12,6 +12,7 @@ const TABS = [
     { id: 'system', label: 'System', path: '/settings/system', icon: Wrench },
     { id: 'virus-scan', label: 'Virus Scan', path: '/settings/virus-scan', icon: ShieldCheck },
     { id: 'sso', label: 'SSO', path: '/settings/sso', icon: Globe },
+    { id: 'backup', label: 'Backup', path: '/settings/backup', icon: HardDrive },
     { id: 'admin', label: 'Administration', path: '/settings/admin', icon: Shield },
 ];
 
@@ -85,7 +86,7 @@ export function SettingsLayout() {
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
-                <div className="max-w-3xl">
+                <div className="max-w-6xl mx-auto">
                     <Outlet />
                 </div>
             </div>

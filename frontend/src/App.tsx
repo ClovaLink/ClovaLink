@@ -44,6 +44,7 @@ const EmailTemplatesSettings = lazy(() => import('./pages/settings').then(m => (
 const KeyboardShortcutsSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.KeyboardShortcutsSettings })));
 const VirusScanSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.VirusScanSettings })));
 const SsoSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.SsoSettings })));
+const BackupRestoreSettings = lazy(() => import('./pages/settings').then(m => ({ default: m.BackupRestoreSettings })));
 
 import { AuthProvider } from './context/AuthContext';
 import { SettingsProvider } from './context/SettingsContext';
@@ -114,6 +115,7 @@ function App() {
                                                     <Route path="system" element={<SystemSettings />} />
                                                     <Route path="virus-scan" element={<VirusScanSettings />} />
                                                     <Route path="sso" element={<SsoSettings />} />
+                                                    <Route path="backup" element={<BackupRestoreSettings />} />
                                                     <Route path="admin" element={<AdminSettings />} />
                                                 </Route>
                                                 

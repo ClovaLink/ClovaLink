@@ -121,7 +121,7 @@ export function TenantEmailTemplates({ tenantId, authFetch }: TenantEmailTemplat
     }
 
     return (
-        <div className="max-w-3xl space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
             {/* Header */}
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">

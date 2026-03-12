@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, FileText, CheckCircle, AlertCircle, Loader2, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import clsx from 'clsx';
 
 export interface UploadFile {
@@ -16,68 +16,119 @@ interface UploadProgressModalProps {
 }
 
 export function UploadProgressModal({ isOpen, onClose, files }: UploadProgressModalProps) {
-    if (!isOpen) return null;
+    const [expanded, setExpanded] = useState(true);
 
-    const totalProgress = files.reduce((acc, f) => acc + f.progress, 0) / files.length;
-    const isAllCompleted = files.every(f => f.status === 'completed');
-    const hasErrors = files.some(f => f.status === 'error');
+    const totalProgress = files.length > 0
+        ? Math.round(files.reduce((acc, f) => acc + f.progress, 0) / files.length)
+        : 0;
+    const isAllCompleted = files.length > 0 && files.every(f => f.status === 'completed' || f.status === 'error');
+    const completedCount = files.filter(f => f.status === 'completed').length;
+    const errorCount = files.filter(f => f.status === 'error').length;
+    const hasErrors = errorCount > 0;
+    const isUploading = files.some(f => f.status === 'uploading' || f.status === 'pending');
+
+    // Auto-dismiss 4 seconds after all complete (no errors)
+    useEffect(() => {
+        if (isAllCompleted && !hasErrors && isOpen) {
+            const timer = setTimeout(() => {
+                onClose();
+            }, 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [isAllCompleted, hasErrors, isOpen, onClose]);
+
+    // Expand when new uploads start
+    useEffect(() => {
+        if (isUploading) {
+            setExpanded(true);
+        }
+    }, [isUploading]);
+
+    if (!isOpen || files.length === 0) return null;
+
+    const headerText = isAllCompleted
+        ? hasErrors
+            ? `${completedCount} uploaded, ${errorCount} failed`
+            : `${completedCount} upload${completedCount !== 1 ? 's' : ''} complete`
+        : `Uploading ${files.length} file${files.length !== 1 ? 's' : ''}`;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-                    <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+        <div
+            className="fixed bottom-4 right-4 z-50 w-[380px] bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+            style={{ animation: 'upload-slide-up 0.3s ease-out' }}
+        >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2 min-w-0">
+                    {isUploading ? (
+                        <Loader2 className="h-4 w-4 text-primary-500 animate-spin flex-shrink-0" />
+                    ) : isAllCompleted && !hasErrors ? (
+                        <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    ) : hasErrors ? (
+                        <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                    ) : (
+                        <Upload className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    )}
+                    <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {headerText}
+                    </span>
                 </div>
-
-                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-                <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
-                    <div className="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                        <div className="sm:flex sm:items-start">
-                            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                                <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white flex justify-between items-center">
-                                    <span>Uploading {files.length} {files.length === 1 ? 'file' : 'files'}</span>
-                                    {isAllCompleted && <span className="text-green-600 text-sm font-normal">Completed</span>}
-                                </h3>
-
-                                {/* Overall Progress */}
-                                <div className="mt-4 relative pt-1">
-                                    <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200 dark:bg-gray-700">
-                                        <div style={{ width: `${totalProgress}%` }} className={clsx("shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500", hasErrors ? "bg-red-500" : "bg-primary-600")}></div>
-                                    </div>
-                                </div>
-
-                                {/* File List */}
-                                <div className="mt-4 max-h-60 overflow-y-auto space-y-3">
-                                    {files.map((f, idx) => (
-                                        <div key={idx} className="flex items-center justify-between text-sm">
-                                            <div className="flex items-center overflow-hidden">
-                                                <FileText className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
-                                                <span className="truncate max-w-xs text-gray-700 dark:text-gray-300">{f.file.name}</span>
-                                            </div>
-                                            <div className="flex items-center ml-2">
-                                                {f.status === 'uploading' && <Loader2 className="h-4 w-4 text-primary-500 animate-spin" />}
-                                                {f.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                                                {f.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                                                {f.status === 'pending' && <span className="text-gray-400 text-xs">Waiting...</span>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
-                        >
-                            {isAllCompleted ? 'Close' : 'Cancel'}
-                        </button>
-                    </div>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+                    >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
                 </div>
             </div>
+
+            {/* Overall progress bar */}
+            {isUploading && (
+                <div className="h-1 bg-gray-200 dark:bg-gray-700">
+                    <div
+                        className={clsx(
+                            "h-full transition-all duration-500 ease-out",
+                            hasErrors ? "bg-red-500" : "bg-primary-500"
+                        )}
+                        style={{ width: `${totalProgress}%` }}
+                    />
+                </div>
+            )}
+
+            {/* File list */}
+            {expanded && (
+                <div className="max-h-[240px] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700/50">
+                    {files.map((f, idx) => (
+                        <div key={idx} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                            <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1 min-w-0">
+                                {f.file.name}
+                            </span>
+                            <div className="flex-shrink-0">
+                                {f.status === 'uploading' && (
+                                    <Loader2 className="h-4 w-4 text-primary-500 animate-spin" />
+                                )}
+                                {f.status === 'completed' && (
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                )}
+                                {f.status === 'error' && (
+                                    <AlertCircle className="h-4 w-4 text-red-500" />
+                                )}
+                                {f.status === 'pending' && (
+                                    <span className="text-xs text-gray-400">Pending</span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

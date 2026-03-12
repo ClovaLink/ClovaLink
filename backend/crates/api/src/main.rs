@@ -47,6 +47,7 @@ mod sharing;
 mod groups;
 pub mod approvals;
 pub mod compliance;
+mod settings_backup;
 pub mod middleware;
 
 use middleware::{TransferScheduler, ApiUsageWriter, ApiUsageState};
@@ -95,6 +96,9 @@ pub struct AppState {
     pub virus_scan_config: clovalink_core::virus_scan::VirusScanConfig,
     // ClamAV circuit breaker (shared across workers)
     pub clamav_circuit_breaker: Option<Arc<clovalink_core::circuit_breaker::CircuitBreaker>>,
+    // Backup circuit breaker + concurrency limit
+    pub backup_circuit_breaker: Arc<clovalink_core::circuit_breaker::CircuitBreaker>,
+    pub backup_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 
@@ -233,6 +237,21 @@ async fn main() {
         tracing::info!("S3 replication disabled");
     }
 
+    // Validate BACKUP_MASTER_KEY — required for backup at-rest encryption
+    // Does NOT panic if missing — backups just won't have at-rest encryption until it's set.
+    // Backup endpoints will return 503 if encryption is needed but key is missing.
+    match std::env::var("BACKUP_MASTER_KEY") {
+        Ok(k) if k.len() >= 32 => {
+            tracing::info!("BACKUP_MASTER_KEY validated ({} chars) — backup at-rest encryption enabled", k.len());
+        }
+        Ok(k) => {
+            tracing::error!("BACKUP_MASTER_KEY is too short ({} chars, minimum 32). Backup at-rest encryption will fail. Generate with: openssl rand -base64 48", k.len());
+        }
+        Err(_) => {
+            tracing::warn!("BACKUP_MASTER_KEY not set — backup passphrase at-rest encryption disabled. Set it to enable scheduled backups. Generate with: openssl rand -base64 48");
+        }
+    }
+
     // Mark server start time for uptime tracking
     health::mark_server_start();
 
@@ -288,6 +307,16 @@ async fn main() {
         replication_config: replication_config.clone(),
         virus_scan_config: virus_scan_config.clone(),
         clamav_circuit_breaker: clamav_circuit_breaker.clone(),
+        backup_circuit_breaker: Arc::new(clovalink_core::circuit_breaker::CircuitBreaker::new(
+            "backup",
+            3,   // failure threshold - opens after 3 infrastructure failures
+            60,  // recovery timeout - tries half-open after 60 seconds
+            2,   // success threshold - closes after 2 successes in half-open
+        )),
+        backup_semaphore: Arc::new(tokio::sync::Semaphore::new(
+            std::env::var("BACKUP_MAX_CONCURRENT").ok()
+                .and_then(|v| v.parse().ok()).unwrap_or(2)
+        )),
     });
 
     // Extension state for extension routes
@@ -316,6 +345,20 @@ async fn main() {
         }
     });
     
+    // Start backup scheduler in background
+    {
+        let backup_pool = pool.clone();
+        let backup_storage = storage.clone();
+        let backup_cb = app_state.backup_circuit_breaker.clone();
+        let backup_sem = app_state.backup_semaphore.clone();
+        let backup_redis = redis_url.clone();
+        tokio::spawn(async move {
+            settings_backup::start_backup_scheduler(
+                backup_pool, backup_storage, backup_cb, backup_sem, backup_redis,
+            ).await;
+        });
+    }
+
     // Start S3 replication workers if enabled
     if replication_config.enabled && replication_config.validate().is_ok() {
         let worker_count = replication_config.workers;
@@ -566,6 +609,29 @@ async fn main() {
             .delete(global_settings::delete_favicon)
         )
         
+        // Backup & Restore
+        .route("/api/backup/export", get(settings_backup::export_tenant_backup))
+        .route("/api/backup/import", post(settings_backup::import_tenant_backup))
+        .route("/api/backup/import/preview", post(settings_backup::preview_import))
+        .route("/api/backup/apply-profile", post(settings_backup::apply_profile))
+        .route("/api/backup/apply-settings-profile", post(settings_backup::apply_settings_profile))
+        .route("/api/backup/global/export", get(settings_backup::export_global))
+        .route("/api/backup/global/import", post(settings_backup::import_global))
+        .route("/api/backup/global/import/preview", post(settings_backup::preview_global_import))
+        .route("/api/backup/global/apply-settings-profile", post(settings_backup::apply_global_settings_profile))
+        .route("/api/backup/global/toggle", put(settings_backup::toggle_global_backup))
+        .route("/api/backup/global/status", get(settings_backup::global_backup_status))
+        .route("/api/backup/global/save", post(settings_backup::save_global_backup_to_storage))
+        .route("/api/backup/global/schedule", get(settings_backup::get_global_backup_schedule).put(settings_backup::set_global_backup_schedule))
+        .route("/api/backup/current-settings", get(settings_backup::get_current_settings))
+        .route("/api/backup/section-counts", get(settings_backup::section_counts))
+        .route("/api/backup/save", post(settings_backup::save_backup_to_storage))
+        .route("/api/backup/saved", get(settings_backup::list_saved_backups))
+        .route("/api/backup/saved/{id}/download", get(settings_backup::download_saved_backup))
+        .route("/api/backup/saved/{id}", delete(settings_backup::delete_saved_backup))
+        .route("/api/backup/health", get(settings_backup::backup_health))
+        .route("/api/backup/metrics", get(settings_backup::backup_metrics))
+
         // Global Email Templates (SuperAdmin)
         .route("/api/email-templates", get(email_templates::list_global_templates))
         .route("/api/email-templates/{key}", 

@@ -73,6 +73,17 @@ input:-webkit-autofill:active {
   }
 }
 
+@keyframes upload-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
 .animate-gradient-xy {
   animation: gradient-xy 15s ease infinite;
   background-size: 400% 400%;

@@ -365,6 +365,27 @@ if [[ "$ENABLE_ENCRYPTION" =~ ^[Yy]$ ]]; then
     fi
 fi
 
+# Ask about backup encryption key
+BACKUP_MASTER_KEY=""
+echo ""
+echo -e "  ${BOLD}Backup Encryption${NC}"
+echo -e "  Required if you plan to use scheduled auto-backups."
+echo -e "  Encrypts the system-generated backup passphrase at rest in the database."
+echo -e "  ${YELLOW}Note: Manual export/import works without this.${NC}"
+echo ""
+echo -e "  ${CYAN}Generate backup master key? (recommended) (Y/n):${NC}"
+read_input "  Generate: " ENABLE_BACKUP_KEY "y"
+
+if [[ "$ENABLE_BACKUP_KEY" =~ ^[Yy]$ ]]; then
+    if command -v openssl &> /dev/null; then
+        BACKUP_MASTER_KEY=$(openssl rand -base64 48)
+        echo -e "  ${GREEN}✓${NC} Generated backup master key"
+    else
+        echo -e "  ${YELLOW}⚠${NC} OpenSSL not found, skipping key generation"
+        echo -e "  You can manually set BACKUP_MASTER_KEY in .env later."
+    fi
+fi
+
 # Create .env file
 {
     echo "# ClovaLink Configuration"
@@ -389,6 +410,15 @@ fi
         echo "ENCRYPTION_KEY=${ENCRYPTION_KEY}"
     else
         echo "# ENCRYPTION_KEY=your-base64-encoded-32-byte-key"
+    fi
+    echo ""
+    echo "# Backup Encryption (encrypts auto-backup passphrases at rest)"
+    echo "# Required for scheduled auto-backups, not needed for manual export/import"
+    echo "# Generate with: openssl rand -base64 48"
+    if [ -n "$BACKUP_MASTER_KEY" ]; then
+        echo "BACKUP_MASTER_KEY=${BACKUP_MASTER_KEY}"
+    else
+        echo "# BACKUP_MASTER_KEY=your-key-here-minimum-32-chars"
     fi
     echo ""
     echo "# Optional: S3/Backblaze B2/Wasabi configuration"
