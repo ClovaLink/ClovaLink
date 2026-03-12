@@ -121,6 +121,30 @@ if [ "$1" = "--update" ] || [ "$1" = "update" ]; then
         rm -f compose.yml.new
     fi
 
+    # Check for new env vars introduced in newer versions
+    if ! grep -q "BACKUP_MASTER_KEY" .env; then
+        echo ""
+        echo -e "  ${BOLD}New in v0.1.6: Backup Master Key${NC}"
+        echo -e "  Required for scheduled auto-backups (encrypts passphrase at rest)."
+        echo -e "  ${YELLOW}Manual export/import works without it.${NC}"
+        echo ""
+        echo -e "  ${CYAN}Generate backup master key? (Y/n):${NC}"
+        read_input "  Generate: " ENABLE_BACKUP_KEY "y"
+        if [[ "$ENABLE_BACKUP_KEY" =~ ^[Yy]$ ]]; then
+            if command -v openssl &> /dev/null; then
+                NEW_KEY=$(openssl rand -base64 48)
+                echo "" >> .env
+                echo "# Backup Encryption (added by updater)" >> .env
+                echo "BACKUP_MASTER_KEY=${NEW_KEY}" >> .env
+                echo -e "  ${GREEN}✓${NC} Added BACKUP_MASTER_KEY to .env"
+            else
+                echo -e "  ${YELLOW}⚠${NC} OpenSSL not found. Add BACKUP_MASTER_KEY to .env manually."
+            fi
+        else
+            echo -e "  ${YELLOW}⚠${NC} Skipped — auto-backups will be disabled until configured"
+        fi
+    fi
+
     # Pull latest images
     echo ""
     echo -e "${BLUE}[3/4]${NC} Pulling latest images..."

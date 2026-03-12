@@ -26,8 +26,9 @@ services:
       - ENVIRONMENT=development
       - CORS_DEV_MODE=true
       # Database connection pool configuration
-      # Backup encryption master key (32+ chars, encrypts auto-backup passphrases at rest)
-      - BACKUP_MASTER_KEY=clovalink-dev-master-key-change-me
+      # Backup master key — required for scheduled auto-backups (encrypts passphrase at rest)
+      # Generate with: openssl rand -base64 48
+      # - BACKUP_MASTER_KEY=your-key-here
       - DB_MAX_CONNECTIONS=50
       - DB_MIN_CONNECTIONS=10
       - DB_ACQUIRE_TIMEOUT_SECS=5
