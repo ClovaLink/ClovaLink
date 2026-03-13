@@ -87,6 +87,17 @@ pub(crate) fn is_master_key_configured() -> bool {
         .unwrap_or(false)
 }
 
+/// Normalize a cron expression to 6-field format (with seconds) for the `cron` crate.
+/// Standard 5-field expressions like "0 2 * * *" become "0 0 2 * * *".
+fn normalize_cron(expr: &str) -> String {
+    let fields: Vec<&str> = expr.trim().split_whitespace().collect();
+    if fields.len() == 5 {
+        format!("0 {}", expr.trim())
+    } else {
+        expr.to_string()
+    }
+}
+
 /// Encrypt a passphrase for at-rest storage using BACKUP_MASTER_KEY env var.
 /// Returns "enc:<base64(nonce + ciphertext)>" if master key is set, or plaintext if not.
 fn encrypt_passphrase_at_rest(passphrase: &str) -> String {
@@ -3467,7 +3478,7 @@ async fn find_due_tenants(
 
     for (tenant_id, name, cron_expr, retention) in tenants {
         // Parse cron expression
-        let schedule = match cron_expr.parse::<cron::Schedule>() {
+        let schedule = match normalize_cron(&cron_expr).parse::<cron::Schedule>() {
             Ok(s) => s,
             Err(e) => {
                 tracing::warn!("Invalid cron '{}' for tenant '{}': {:?}", cron_expr, name, e);
@@ -3748,7 +3759,7 @@ async fn check_and_run_global_auto_backup(
         .and_then(|(v,)| v.as_str().map(|s| s.to_string()))
         .unwrap_or_else(|| "0 3 * * 0".to_string());
 
-    let schedule = match cron_expr.parse::<cron::Schedule>() {
+    let schedule = match normalize_cron(&cron_expr).parse::<cron::Schedule>() {
         Ok(s) => s,
         Err(_) => return Ok(()),
     };
@@ -4025,7 +4036,7 @@ pub async fn set_global_backup_schedule(
 
     if let Some(ref cron_expr) = body.cron {
         // Validate cron expression
-        if cron_expr.parse::<cron::Schedule>().is_err() {
+        if normalize_cron(&cron_expr).parse::<cron::Schedule>().is_err() {
             return Ok(Json(json!({ "success": false, "error": "Invalid cron expression" })));
         }
         sqlx::query(
