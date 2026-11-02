@@ -4345,12 +4345,33 @@ pub async fn export_files(
 /// Serve files from uploads directory (avatars, etc.)
 /// This works with both local and S3 storage using streaming (zero-copy)
 /// GET /uploads/*path
+/// Whether `/uploads/{*path}` may serve this storage key without authentication.
+///
+/// Only the keys the app links publicly qualify: `branding/logo.*`, `branding/favicon.*`
+/// (global_settings.rs) and `avatars/{user_id}.*` (users.rs). Tenant files and every other
+/// key go through the authenticated download routes, and `..` or absolute paths are refused.
+fn is_public_upload_key(path: &str) -> bool {
+    let normal_components = std::path::Path::new(path)
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)));
+    let mut segments = path.split('/');
+    let public_dir = matches!(segments.next(), Some("branding") | Some("avatars"));
+    let file_name = segments.next().filter(|name| !name.is_empty());
+    normal_components && public_dir && file_name.is_some() && segments.next().is_none()
+}
+
 pub async fn serve_upload(
     State(state): State<Arc<AppState>>,
     Path(path): Path<String>,
 ) -> Result<axum::response::Response<axum::body::Body>, StatusCode> {
     tracing::debug!("Serving upload: {}", path);
-    
+
+    // This route has no authentication: only serve the public images it exists for
+    if !is_public_upload_key(&path) {
+        tracing::warn!("Refused non-public upload path: {:?}", path);
+        return Err(StatusCode::NOT_FOUND);
+    }
+
     // Stream file from storage (works for both local and S3)
     let (stream, size) = state.storage.download_stream(&path).await
         .map_err(|e| {
@@ -5098,4 +5119,34 @@ pub async fn migrate_content_hashes(
             "All files have been migrated" 
         }
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_public_upload_key;
+
+    #[test]
+    fn branding_and_avatar_keys_are_public() {
+        assert!(is_public_upload_key("branding/logo.png"));
+        assert!(is_public_upload_key("branding/favicon.svg"));
+        assert!(is_public_upload_key("avatars/0d4e5f6a-7b8c-4d9e-0f1a-2b3c4d5e6f7a.jpg"));
+    }
+
+    #[test]
+    fn tenant_files_are_not_public() {
+        // Content-addressed tenant file key: {tenant_id}/{dept or private}/{hash_prefix}/{hash}
+        assert!(!is_public_upload_key("b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e/private/ab/abcdef"));
+        assert!(!is_public_upload_key("avatars"));
+        assert!(!is_public_upload_key("avatars/"));
+        assert!(!is_public_upload_key("avatars/sub/file.png"));
+    }
+
+    #[test]
+    fn traversal_and_absolute_keys_are_refused() {
+        assert!(!is_public_upload_key("../etc/passwd"));
+        assert!(!is_public_upload_key("avatars/../b2c3d4e5/private/ab/abcdef"));
+        assert!(!is_public_upload_key("branding/.."));
+        assert!(!is_public_upload_key("/etc/passwd"));
+        assert!(!is_public_upload_key("./branding/logo.png"));
+    }
 }

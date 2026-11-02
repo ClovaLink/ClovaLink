@@ -4,7 +4,7 @@ use aws_config::meta::region::RegionProviderChain;
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::primitives::ByteStream;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::time::Duration;
 use std::pin::Pin;
 use async_trait::async_trait;
@@ -349,12 +349,27 @@ impl LocalStorage {
             base_path: std::path::PathBuf::from(base_path),
         }
     }
+
+    /// Maps a storage key to a path under `base_path`.
+    ///
+    /// Keys reach this from URLs (`/uploads/{*path}`) and from the database, so a key
+    /// containing `..` or starting at the filesystem root is refused instead of joined:
+    /// `PathBuf::join` would otherwise resolve it outside the storage directory.
+    fn path_for(&self, key: &str) -> Result<std::path::PathBuf, Box<dyn Error + Send + Sync>> {
+        let escapes = Path::new(key)
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_) | Component::CurDir));
+        if escapes {
+            return Err(format!("invalid storage key: {:?}", key).into());
+        }
+        Ok(self.base_path.join(key))
+    }
 }
 
 #[async_trait]
 impl Storage for LocalStorage {
     async fn upload(&self, key: &str, data: Vec<u8>) -> Result<String, Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -363,7 +378,7 @@ impl Storage for LocalStorage {
     }
     
     async fn upload_from_path(&self, key: &str, source_path: &Path) -> Result<String, Box<dyn Error + Send + Sync>> {
-        let dest_path = self.base_path.join(key);
+        let dest_path = self.path_for(key)?;
         if let Some(parent) = dest_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -373,13 +388,13 @@ impl Storage for LocalStorage {
     }
 
     async fn download(&self, key: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         let data = tokio::fs::read(path).await?;
         Ok(data)
     }
 
     async fn delete(&self, key: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         if path.is_dir() {
             tokio::fs::remove_dir_all(path).await?;
         } else {
@@ -390,7 +405,7 @@ impl Storage for LocalStorage {
 
     async fn list(&self, prefix: &str) -> Result<Vec<FileMetadata>, Box<dyn Error + Send + Sync>> {
         let mut files = Vec::new();
-        let path = self.base_path.join(prefix);
+        let path = self.path_for(prefix)?;
         
         if !path.exists() {
             return Ok(files);
@@ -419,14 +434,14 @@ impl Storage for LocalStorage {
     }
 
     async fn create_folder(&self, key: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         tokio::fs::create_dir_all(path).await?;
         Ok(())
     }
 
     async fn rename(&self, from: &str, to: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let from_path = self.base_path.join(from);
-        let to_path = self.base_path.join(to);
+        let from_path = self.path_for(from)?;
+        let to_path = self.path_for(to)?;
         
         // Ensure the parent directory of the target exists
         if let Some(parent) = to_path.parent() {
@@ -438,7 +453,7 @@ impl Storage for LocalStorage {
     }
 
     async fn exists(&self, key: &str) -> Result<bool, Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         Ok(path.exists())
     }
     
@@ -456,7 +471,7 @@ impl Storage for LocalStorage {
     }
     
     async fn download_stream(&self, key: &str) -> Result<(StorageByteStream, u64), Box<dyn Error + Send + Sync>> {
-        let path = self.base_path.join(key);
+        let path = self.path_for(key)?;
         let file = tokio::fs::File::open(&path).await?;
         let metadata = file.metadata().await?;
         let size = metadata.len();
@@ -686,5 +701,54 @@ impl Storage for EncryptedLocalStorage {
     
     async fn health_check(&self) -> Result<u64, Box<dyn Error + Send + Sync>> {
         self.inner.health_check().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A storage root inside a scratch directory that also holds a file outside the root.
+    fn scratch(name: &str) -> (std::path::PathBuf, LocalStorage) {
+        let dir = std::env::temp_dir().join(format!("clovalink-storage-{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("outside.txt"), b"outside").unwrap();
+        let storage = LocalStorage::new(dir.join("root").to_str().unwrap());
+        (dir, storage)
+    }
+
+    #[tokio::test]
+    async fn keys_inside_the_root_still_work() {
+        let (dir, storage) = scratch("inside");
+        storage.upload("tenant/private/ab/hash", b"data".to_vec()).await.unwrap();
+        assert_eq!(storage.download("tenant/private/ab/hash").await.unwrap(), b"data");
+        assert!(storage.exists("./tenant/private/ab/hash").await.unwrap());
+        assert_eq!(storage.list("").await.unwrap().len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn parent_dir_keys_are_refused() {
+        let (dir, storage) = scratch("parent");
+        assert!(storage.download("../outside.txt").await.is_err());
+        assert!(storage.download("avatars/../../outside.txt").await.is_err());
+        assert!(storage.download_stream("../outside.txt").await.is_err());
+        assert!(storage.upload("../written.txt", b"x".to_vec()).await.is_err());
+        assert!(storage.delete("../outside.txt").await.is_err());
+        assert!(storage.rename("../outside.txt", "moved.txt").await.is_err());
+        assert!(storage.list("..").await.is_err());
+        assert!(dir.join("outside.txt").exists());
+        assert!(!dir.join("written.txt").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn absolute_keys_are_refused() {
+        let (dir, storage) = scratch("absolute");
+        let absolute = dir.join("outside.txt");
+        assert!(storage.download(absolute.to_str().unwrap()).await.is_err());
+        assert!(storage.exists(absolute.to_str().unwrap()).await.is_err());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
